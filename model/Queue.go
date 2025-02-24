@@ -1,5 +1,10 @@
 package model
 
 type Queue struct {
-	files []File
+	Files              []File
+	Directory          string
+	NumberOfFilesLimit int
+	BandWidth          int
+	NumberOfTriesLimit int
+	TimeInterval       [2]int
 }

@@ -6,4 +6,5 @@ const (
 	paused Status = iota
 	failed
 	inProgress
+	completed
 )
