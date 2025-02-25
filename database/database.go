@@ -1,7 +1,7 @@
 package database
 
 import (
-	"IDM/model"
+	"IDM/internal/model"
 )
 
 type DataBase struct {

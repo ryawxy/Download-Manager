@@ -1,6 +1,8 @@
 package manager
 
-import "IDM/model"
+import (
+	"IDM/internal/model"
+)
 
 type QueueManager struct {
 }
