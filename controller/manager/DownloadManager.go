@@ -5,13 +5,13 @@ import "IDM/model"
 type DownloadManager struct {
 }
 
-func (d *DownloadManager) addDownload() {
+func (d *DownloadManager) startDownload() {
 	//TODO
 }
 func (d *DownloadManager) changeDownloadStatus(file *model.File) {
 	//TODO
 }
-func (d *DownloadManager) deleteFromQueu(file *model.File, queue model.Queue) {
+func (d *DownloadManager) deleteFromQueue(file *model.File, queue model.Queue) {
 	//TODO
 }
 func (d *DownloadManager) retry(file *model.File) {
