@@ -1,22 +1,22 @@
 package manager
 
 import (
-	model2 "IDM/internal/model"
+	"IDM/internal/download"
 	"IDM/internal/queue"
 )
 
 type DownloadManager struct {
 }
 
-func (d *DownloadManager) startDownload() {
+func (d *DownloadManager) startDownload(download download.Download) {
 	//TODO
 }
-func (d *DownloadManager) changeDownloadStatus(file *model2.File) {
+func (d *DownloadManager) changeDownloadStatus(download download.Download) {
 	//TODO
 }
-func (d *DownloadManager) deleteFromQueue(file *model2.File, queue queue.Queue) {
+func (d *DownloadManager) deleteFromQueue(download download.Download, queue *queue.Queue) {
 	//TODO
 }
-func (d *DownloadManager) retry(file *model2.File) {
+func (d *DownloadManager) retry(download download.Download) {
 	//TODO
 }
