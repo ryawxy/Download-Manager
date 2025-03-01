@@ -1,6 +1,7 @@
 package manager
 
 import (
+	database2 "IDM/internal/database"
 	"IDM/internal/download"
 	"IDM/internal/queue"
 	"context"
@@ -13,16 +14,18 @@ import (
 )
 
 type DownloadManager struct {
-	URL       string
-	FileName  string
-	FileSize  int64 // whole file
-	ChunkSize int64 // size that each worker process
+	URL       string `json:"url"`
+	FileName  string `json:"fileName"`
+	FileSize  int64  `json:"fileSize"`  // whole file
+	ChunkSize int64  `json:"chunkSize"` // size that each worker process
 	Workers   int
 	Cancel    context.CancelFunc
 	Ctx       context.Context
 	Mutex     sync.Mutex
-	Paused    bool // our goroutines must check this field...
+	Paused    bool `json:"paused"` // our goroutines must check this field...
 }
+
+var database database2.DataBase
 
 /*
 	NewDownloadManager is just a simple constructor, dont worry :)
@@ -85,7 +88,12 @@ func (dm *DownloadManager) downloadChunk(start int64, end int64, partNum int, wg
 		return
 	}
 	// dont forget to close files at the end!
-	defer file.Close()
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			fmt.Println("Error closing file:", err)
+		}
+	}(file)
 
 	buf := make([]byte, 1024)
 
