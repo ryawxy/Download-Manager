@@ -34,7 +34,7 @@ better to implement at future i guess, we can create multiple DM
 */
 func NewDownloadManager(url string, fileName string, workers int) *DownloadManager {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &DownloadManager{
+	d := &DownloadManager{
 		URL:      url,
 		FileName: fileName,
 		Workers:  workers,
@@ -42,6 +42,11 @@ func NewDownloadManager(url string, fileName string, workers int) *DownloadManag
 		Ctx:      ctx,
 		Paused:   false,
 	}
+	//err := SaveData(d)
+	//if err != nil {
+	//	return nil
+	//}
+	return d
 }
 
 /*
