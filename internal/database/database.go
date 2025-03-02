@@ -1,9 +1,9 @@
 package database
 
 import (
-	"IDM/internal/model"
+	"IDM/internal/queue"
 )
 
 type DataBase struct {
-	queuesList []model.Queue
+	QueuesList []*queue.Queue
 }
