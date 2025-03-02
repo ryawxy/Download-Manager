@@ -13,10 +13,10 @@ const (
 
 type Download struct {
 	Id         string //TODO:Random id generator?
-	URL        string
-	Filename   string
-	Status     Status
-	Progress   int64
-	TotalBytes int64
+	URL        string `json:"URL"`
+	Filename   string `json:"Filename"`
+	Status     Status `json:"status"`
+	Progress   int64  `json:"progress"`
+	TotalBytes int64  `json:"total_bytes"`
 	StartTime  time.Time
 }
