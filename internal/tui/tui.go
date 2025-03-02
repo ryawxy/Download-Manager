@@ -14,19 +14,19 @@ var (
 type Tab interface {
 	tea.Model
 	toString() string
+	setActive(bool) Tab
+	isActivated() bool
 }
 
 type MainStage struct {
-	isInTabControl bool
-	currentTab     int
-	tabs           []Tab
+	currentTab int
+	tabs       []Tab
 }
 
 func NewMainStage() MainStage {
 	return MainStage{
-		isInTabControl: false,
-		currentTab:     0,
-		tabs:           append([]Tab{}, NewDownloadTab{}, DownloadsTab{}, QueuesTab{}),
+		currentTab: 0,
+		tabs:       append([]Tab{}, NewNewDownloadTab(), DownloadsTab{}, QueuesTab{}),
 	}
 }
 
@@ -35,31 +35,26 @@ func (m MainStage) Init() tea.Cmd {
 	return nil
 }
 func (m MainStage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if m.isInTabControl == false {
-		if msg, ok := msg.(tea.KeyMsg); ok {
-			switch msg.String() {
-			case "down":
-				m.currentTab = (m.currentTab + 1) % len(m.tabs)
-			case "up":
-				m.currentTab = (m.currentTab + len(m.tabs) - 1) % len(m.tabs)
-			case "right":
-				m.isInTabControl = true
-			}
-		}
-		return m, nil
-	}
-	//todo correct here!!!
-	if m.isInTabControl == true {
-		if msg, ok := msg.(tea.KeyMsg); ok {
-			switch msg.String() {
-			case "left":
-				m.isInTabControl = false
-			}
+	for _, tab := range m.tabs {
+		if tab.isActivated() {
+			n, cmd := tab.Update(msg)
+			m.tabs[m.currentTab] = n.(Tab)
+			return m, cmd
 		}
 	}
-	n, cmd := m.tabs[m.currentTab].Update(msg)
-	m.tabs[m.currentTab] = n.(Tab)
-	return m, cmd
+	if msg, ok := msg.(tea.KeyMsg); ok {
+		switch msg.String() {
+		case "down":
+			m.currentTab = (m.currentTab + 1) % len(m.tabs)
+		case "up":
+			m.currentTab = (m.currentTab + len(m.tabs) - 1) % len(m.tabs)
+		case "right":
+			m.tabs[m.currentTab] = m.tabs[m.currentTab].setActive(true)
+		case "ctrl+c":
+			return m, tea.Quit
+		}
+	}
+	return m, nil
 }
 func (m MainStage) View() string {
 	var renderedTabs []string

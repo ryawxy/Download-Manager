@@ -7,6 +7,14 @@ import (
 type QueuesTab struct {
 }
 
+func (q QueuesTab) setActive(b bool) Tab {
+	return q
+}
+
+func (q QueuesTab) isActivated() bool {
+	return false
+}
+
 func (q QueuesTab) toString() string {
 	return "Queues"
 }

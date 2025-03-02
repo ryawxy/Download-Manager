@@ -14,25 +14,56 @@ var (
 type NewDownloadTab struct {
 	url, queue, saveAs textinput.Model
 	cursor             int
+	isActive           bool
+}
+
+func NewNewDownloadTab() NewDownloadTab {
+	n := NewDownloadTab{}
+	n.url = textinput.New()
+	n.url.Placeholder = ""
+	n.url.Focus()
+
+	n.queue = textinput.New()
+	n.queue.Placeholder = ""
+
+	n.saveAs = textinput.New()
+	n.saveAs.Placeholder = ""
+
+	n.cursor = -1
+	n.isActive = false
+	return n
+}
+
+func (n NewDownloadTab) setActive(b bool) Tab {
+	n.isActive = b
+	if b {
+		n.cursor = 0
+	} else {
+		n.cursor = -1
+	}
+	return n
+}
+
+func (n NewDownloadTab) isActivated() bool {
+	return n.isActive
 }
 
 func (n NewDownloadTab) Init() tea.Cmd {
 	n.url = textinput.New()
-	n.url.Placeholder = "Enter URL"
+	n.url.Placeholder = ""
 	n.url.Focus()
 
 	n.queue = textinput.New()
-	n.queue.Placeholder = "Enter Queue"
+	n.queue.Placeholder = ""
 
 	n.saveAs = textinput.New()
-	n.saveAs.Placeholder = "Save As"
+	n.saveAs.Placeholder = ""
 
 	n.cursor = -1
 	return nil
 }
 
 func (n NewDownloadTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	n.cursor = 0
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -48,6 +79,9 @@ func (n NewDownloadTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			} else {
 				n.cursor = 0
 			}
+		case "left":
+			n.isActive = false
+			n.cursor = -1
 		case "enter":
 			//todo call new_download function
 		}
