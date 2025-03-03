@@ -3,13 +3,15 @@ package main
 import (
 	"IDM/internal/controller/manager"
 	"IDM/internal/download"
+	"IDM/internal/tui"
 	"bufio"
 	"fmt"
+	tea "github.com/charmbracelet/bubbletea"
 	"os"
 	"strings"
 )
 
-func main() {
+func theirMain() {
 
 	//var d download.Download = download.Download{
 	//	URL:      "asdfffgg",
@@ -58,4 +60,18 @@ func main() {
 			fmt.Println("Unknown command.")
 		}
 	}
+}
+
+func myMain() {
+	model := tui.NewMainStage()
+
+	p := tea.NewProgram(model)
+	if err := p.Start(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func main() {
+	myMain()
 }

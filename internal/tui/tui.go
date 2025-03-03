@@ -26,7 +26,7 @@ type MainStage struct {
 func NewMainStage() MainStage {
 	return MainStage{
 		currentTab: 0,
-		tabs:       append([]Tab{}, NewNewDownloadTab(), DownloadsTab{}, QueuesTab{}),
+		tabs:       append([]Tab{}, NewNewDownloadTab(), NewDownloadsTab(), QueuesTab{}),
 	}
 }
 
@@ -67,5 +67,5 @@ func (m MainStage) View() string {
 	}
 	tabs := lipgloss.JoinVertical(lipgloss.Top, renderedTabs...)
 	content := m.tabs[m.currentTab].View()
-	return lipgloss.JoinHorizontal(lipgloss.Left, tabs, "        ", content)
+	return "\n\n" + lipgloss.JoinHorizontal(lipgloss.Left, tabs, "        ", content)
 }

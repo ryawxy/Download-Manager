@@ -51,7 +51,6 @@ func (n NewDownloadTab) isActivated() bool {
 func (n NewDownloadTab) Init() tea.Cmd {
 	n.url = textinput.New()
 	n.url.Placeholder = ""
-	n.url.Focus()
 
 	n.queue = textinput.New()
 	n.queue.Placeholder = ""
@@ -91,10 +90,13 @@ func (n NewDownloadTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch n.cursor {
 	case 0:
 		n.url, cmd = n.url.Update(msg)
+		n.url.Focus()
 	case 1:
 		n.queue, cmd = n.queue.Update(msg)
+		n.queue.Focus()
 	case 2:
 		n.saveAs, cmd = n.saveAs.Update(msg)
+		n.saveAs.Focus()
 	}
 
 	return n, cmd
