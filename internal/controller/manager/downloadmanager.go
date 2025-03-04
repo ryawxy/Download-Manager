@@ -1,7 +1,6 @@
 package manager
 
 import (
-	database2 "IDM/internal/database"
 	"IDM/internal/download"
 	"IDM/internal/queue"
 	"context"
@@ -14,18 +13,14 @@ import (
 )
 
 type DownloadManager struct {
-	URL       string `json:"url"`
-	FileName  string `json:"fileName"`
-	FileSize  int64  `json:"fileSize"`  // whole file
-	ChunkSize int64  `json:"chunkSize"` // size that each worker process
+	Download  download.Download
+	ChunkSize int64 `json:"chunkSize"` // size that each worker process
 	Workers   int
 	Cancel    context.CancelFunc
 	Ctx       context.Context
 	Mutex     sync.Mutex
 	Paused    bool `json:"paused"` // our goroutines must check this field...
 }
-
-var database database2.DataBase
 
 /*
 	NewDownloadManager is just a simple constructor, dont worry :)
@@ -34,18 +29,17 @@ better to implement at future i guess, we can create multiple DM
 */
 func NewDownloadManager(url string, fileName string, workers int) *DownloadManager {
 	ctx, cancel := context.WithCancel(context.Background())
-	d := &DownloadManager{
+	download := download.Download{
 		URL:      url,
 		FileName: fileName,
+	}
+	d := &DownloadManager{
+		Download: download,
 		Workers:  workers,
 		Cancel:   cancel,
 		Ctx:      ctx,
 		Paused:   false,
 	}
-	//err := SaveData(d)
-	//if err != nil {
-	//	return nil
-	//}
 	return d
 }
 
@@ -54,7 +48,7 @@ http.Head() sends a HEAD request to server,
 and returns headResponse only (not file content)
 */
 func (dm *DownloadManager) getFileSize() error {
-	headResp, err := http.Head(dm.URL)
+	headResp, err := http.Head(dm.Download.URL)
 	if err != nil {
 		return err
 	}
@@ -62,15 +56,15 @@ func (dm *DownloadManager) getFileSize() error {
 		return fmt.Errorf("failed to get file info: server returned %d - %s", headResp.StatusCode, headResp.Status)
 	}
 
-	dm.FileSize = headResp.ContentLength // converting response to int!
-	dm.ChunkSize = dm.FileSize / int64(dm.Workers)
+	dm.Download.FileSize = headResp.ContentLength // converting response to int!
+	dm.ChunkSize = dm.Download.FileSize / int64(dm.Workers)
 	return nil
 }
 
 func (dm *DownloadManager) downloadChunk(start int64, end int64, partNum int, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	req, err := http.NewRequestWithContext(dm.Ctx, "GET", dm.URL, nil)
+	req, err := http.NewRequestWithContext(dm.Ctx, "GET", dm.Download.URL, nil)
 	if err != nil {
 		fmt.Println("Error while creating request:", err)
 		return
@@ -87,7 +81,7 @@ func (dm *DownloadManager) downloadChunk(start int64, end int64, partNum int, wg
 	// response body must be closed at the end
 	defer resp.Body.Close()
 
-	file, err := os.Create(fmt.Sprintf("%s.part%d", dm.FileName, partNum))
+	file, err := os.Create(fmt.Sprintf("%s.part%d", dm.Download.FileName, partNum))
 	if err != nil {
 		fmt.Println("Error creating file part:", err)
 		return
@@ -158,8 +152,8 @@ func (dm *DownloadManager) StartDownload(download download.Download) error {
 		start := int64(i) * dm.ChunkSize
 		end := start + dm.ChunkSize - 1
 		// handling last part
-		if end >= dm.FileSize {
-			end = dm.FileSize - 1
+		if end >= dm.Download.FileSize {
+			end = dm.Download.FileSize - 1
 		}
 
 		wg.Add(1)
@@ -175,14 +169,14 @@ func (dm *DownloadManager) StartDownload(download download.Download) error {
 func (dm *DownloadManager) mergeFiles() error {
 	fmt.Println("Merging downloaded chunks...")
 
-	outputFile, err := os.Create(dm.FileName)
+	outputFile, err := os.Create(dm.Download.FileName)
 	if err != nil {
 		return err
 	}
 	defer outputFile.Close()
 
 	for i := 0; i < dm.Workers; i++ {
-		partFileName := fmt.Sprintf("%s.part%d", dm.FileName, i)
+		partFileName := fmt.Sprintf("%s.part%d", dm.Download.FileName, i)
 		partFile, err := os.Open(partFileName)
 		if err != nil {
 			return err

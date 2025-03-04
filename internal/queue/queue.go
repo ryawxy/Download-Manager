@@ -37,11 +37,11 @@ func (q *Queue) AddDownload(d *download.Download) error {
 	q.Downloads = append(q.Downloads, d)
 	return nil
 }
-func (q *Queue) RemoveDownload(id string) error {
+func (q *Queue) RemoveDownload(name string) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 	for i, d := range q.Downloads {
-		if d.Id == id {
+		if d.FileName == name {
 			q.Downloads = append(q.Downloads[:i], q.Downloads[i+1:]...)
 			return nil
 		}
