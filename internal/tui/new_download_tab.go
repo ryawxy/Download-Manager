@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	selectedInputStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true)
+	selectedInputStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#18FFFF")).Bold(true)
 	unselectedInputStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 )
 
@@ -21,13 +21,16 @@ func NewNewDownloadTab() NewDownloadTab {
 	n := NewDownloadTab{}
 	n.url = textinput.New()
 	n.url.Placeholder = ""
+	n.url.Prompt = ""
 	n.url.Focus()
 
 	n.queue = textinput.New()
 	n.queue.Placeholder = ""
+	n.queue.Prompt = ""
 
 	n.saveAs = textinput.New()
 	n.saveAs.Placeholder = ""
+	n.saveAs.Prompt = ""
 
 	n.cursor = -1
 	n.isActive = false
@@ -81,6 +84,8 @@ func (n NewDownloadTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "left":
 			n.isActive = false
 			n.cursor = -1
+		case "ctrl+c":
+			return n, tea.Quit
 		case "enter":
 			//todo call new_download function
 		}

@@ -1,9 +1,13 @@
 package tui
 
+//todo implement graceful termination
+
 import (
 	"fmt"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"os"
+	"time"
 )
 
 var (
@@ -30,10 +34,23 @@ func NewMainStage() MainStage {
 	}
 }
 
-func (m MainStage) Init() tea.Cmd {
-	//todo initialize tabs
-	return nil
+func Start() {
+	p := tea.NewProgram(NewMainStage())
+	if err := p.Start(); err != nil {
+		fmt.Println("Error starting program:", err)
+		os.Exit(1)
+	}
 }
+
+type tickMsg time.Time
+
+func (m MainStage) Init() tea.Cmd {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	return func() tea.Msg {
+		return tickMsg(<-ticker.C)
+	}
+}
+
 func (m MainStage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	for _, tab := range m.tabs {
 		if tab.isActivated() {

@@ -3,6 +3,7 @@ package tui
 import (
 	"IDM/internal/download"
 	"fmt"
+	"github.com/charmbracelet/bubbles/progress"
 	"strings"
 	"time"
 
@@ -10,13 +11,15 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-//todo show only 10 rows of download
 //todo implement (retry, pause, resume, cancel) buttons
 
 type DownloadsTab struct {
-	downloads []download.Download
-	cursor    int
-	isActive  bool
+	downloads     []download.Download
+	cursor        int
+	isActive      bool
+	pageStart     int
+	showOptions   bool
+	optionsCursor int
 }
 
 // Generate sample downloads
@@ -36,32 +39,31 @@ func generateRandomDownloads(n int) []download.Download {
 
 // Styles
 var (
+	tableSize   = 10
 	headerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FF79C6")). // Pink headers
+			Foreground(lipgloss.Color("#18FFFF")). // Pink headers
 			Background(lipgloss.Color("")).        // Dark background
 			Bold(true).
 			Padding(0, 1).
 			Border(lipgloss.RoundedBorder())
 
 	rowStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFFFFF")). // Light blue text
-			Background(lipgloss.Color("")).        // Darker background
+			Foreground(lipgloss.Color("240")).
+			Background(lipgloss.Color("")).
 			Padding(0, 1)
 
 	selectedRowStyle = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#8BE9FD")). // White text
+				Foreground(lipgloss.Color("#FFFFFF")). // White text
 				Background(lipgloss.Color("")).        // Blue background for selected row
 				Bold(true).
 				Padding(0, 1)
 )
 
-// Column widths
-var colWidths = []int{12, 6, 10, 10, 12}
-
 // NewDownloadsTab initializes the tab
 func NewDownloadsTab() DownloadsTab {
-	d := generateRandomDownloads(10)
-	return DownloadsTab{downloads: d, cursor: -1}
+	d := generateRandomDownloads(20)
+
+	return DownloadsTab{downloads: d, cursor: -1, pageStart: 0}
 }
 
 // calculateTimeLeft estimates time left for a download
@@ -75,6 +77,24 @@ func calculateTimeLeft(d download.Download) string {
 	return "N/A"
 }
 
+// Column widths
+var colWidths = []int{10, 6, 30, 10, 12}
+
+func getActions(status download.Status) []string {
+	switch status {
+	case download.Completed:
+		return []string{"Delete", "Back"}
+	case download.Failed:
+		return []string{"Retry", "Delete", "Back"}
+	case download.Paused:
+		return []string{"Cancel", "Resume", "Back"}
+	case download.InProgress:
+		return []string{"Pause", "Cancel", "Back"}
+	default:
+		return []string{}
+	}
+}
+
 // RenderTable creates a properly aligned Lipgloss table
 func (d DownloadsTab) RenderTable() string {
 	columns := []string{"Filename", "Queue", "Progress", "Time Left", "Status"}
@@ -86,21 +106,53 @@ func (d DownloadsTab) RenderTable() string {
 	}
 	table := headerStyle.Render(strings.Join(headerRow, " ")) + "\n"
 
+	progressBar := progress.New(
+		progress.WithWidth(colWidths[2]*90/100),
+		progress.WithGradient("#0077BE", "#39FF14"),
+		progress.WithFillCharacters('■', ' '),
+		progress.WithoutPercentage(),
+	)
 	// Render rows
 	for i, entry := range d.downloads {
-		row := []string{
-			lipgloss.NewStyle().Width(colWidths[0]).Render(entry.Filename),
-			lipgloss.NewStyle().Width(colWidths[1]).Render(fmt.Sprintf("%d", i+1)),
-			lipgloss.NewStyle().Width(colWidths[2]).Render(fmt.Sprintf("%d%%", entry.Progress)),
-			lipgloss.NewStyle().Width(colWidths[3]).Render(calculateTimeLeft(entry)),
-			lipgloss.NewStyle().Width(colWidths[4]).Render(string(entry.Status)),
+		if i < d.pageStart || i >= d.pageStart+tableSize {
+			continue
+		}
+		styledRow := []string{
+			selectedRowStyle.Copy().Width(colWidths[0]).Render(entry.Filename[max(len(entry.Filename)-20, 0):]),
+			selectedRowStyle.Copy().Width(colWidths[1]).Render(fmt.Sprintf("%d", i+1)),
+			selectedRowStyle.Copy().Width(colWidths[2]).Render(progressBar.ViewAs(float64(entry.Progress) / 100.0)),
+			selectedRowStyle.Copy().Width(colWidths[3]).Render(calculateTimeLeft(entry)),
+			selectedRowStyle.Copy().Width(colWidths[4]).Render(string(entry.Status)),
 		}
 
-		// Apply selection style
 		if i == d.cursor {
-			table += selectedRowStyle.Render("  "+strings.Join(row, " ")) + "\n"
+			table += "  " + strings.Join(styledRow, " ")
+			if d.showOptions {
+				actions := getActions(entry.Status)
+				if len(actions) > 0 {
+					var styledActions []string
+					for j, action := range actions {
+						if j == d.optionsCursor {
+							styledActions = append(styledActions, selectedRowStyle.Render(action))
+						} else {
+							styledActions = append(styledActions, rowStyle.Render(action))
+						}
+					}
+					// Join the styled actions with a separator and render them inside square brackets.
+					actionStr := "[" + strings.Join(styledActions, " | ") + "]"
+					table += "   " + actionStr
+				}
+			}
+			table += "\n"
 		} else {
-			table += rowStyle.Render(" "+strings.Join(row, " ")) + "\n"
+			row := []string{
+				rowStyle.Copy().Width(colWidths[0]).Render(entry.Filename),
+				rowStyle.Copy().Width(colWidths[1]).Render(fmt.Sprintf("%d", i+1)),
+				rowStyle.Copy().Width(colWidths[2]).Render(progressBar.ViewAs(float64(entry.Progress) / 100.0)),
+				rowStyle.Copy().Width(colWidths[3]).Render(calculateTimeLeft(entry)),
+				rowStyle.Copy().Width(colWidths[4]).Render(string(entry.Status)),
+			}
+			table += " " + strings.Join(row, " ") + "\n"
 		}
 	}
 
@@ -125,11 +177,39 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				d.cursor = 0
 			}
 		case "left":
-			d.isActive = false
-			d.cursor = -1
+			if d.showOptions {
+				if d.optionsCursor > 0 {
+					d.optionsCursor--
+				} else {
+					d.optionsCursor = len(getActions(d.downloads[d.cursor].Status)) - 1
+				}
+			} else {
+				d.cursor = -1
+				d.isActive = false
+			}
+		case "right":
+			if d.showOptions {
+				if d.optionsCursor < len(getActions(d.downloads[d.cursor].Status))-1 {
+					d.optionsCursor++
+				} else {
+					d.optionsCursor = 0
+				}
+			}
+		case "enter":
+			if d.showOptions {
+				d.optionsCursor = 0
+				//todo call the correct function
+			}
+			d.showOptions = !d.showOptions
+
 		case "ctrl+c":
 			return d, tea.Quit
 		}
+	}
+	if d.cursor < d.pageStart {
+		d.pageStart = d.cursor
+	} else if d.pageStart+tableSize <= d.cursor {
+		d.pageStart = d.cursor - tableSize + 1
 	}
 	return d, nil
 }
