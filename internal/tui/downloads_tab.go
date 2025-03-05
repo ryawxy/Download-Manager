@@ -109,7 +109,7 @@ func (d DownloadsTab) RenderTable() string {
 	progressBar := progress.New(
 		progress.WithWidth(colWidths[2]*90/100),
 		progress.WithGradient("#0077BE", "#39FF14"),
-		progress.WithFillCharacters('■', ' '),
+		progress.WithFillCharacters('▬', '▬'),
 		progress.WithoutPercentage(),
 	)
 	// Render rows
