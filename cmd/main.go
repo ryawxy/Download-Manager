@@ -10,13 +10,21 @@ import (
 
 func main() {
 
+	//var d download.Download = download.Download{
+	//	URL:      "asdfffgg",
+	//	Filename: "asdfffgg11",
+	//}
+	//err := manager.SaveData(d)
+	//if err != nil {
+	//	return
+	//}
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Print("Enter download URL: ")
 	url, _ := reader.ReadString('\n')
 	url = strings.TrimSpace(url)
 
 	// TODO: program should extract the file name & format itself :(
-	fileName := "download_output.pdf"
+	fileName := "download_output.mp3"
 	workers := 4
 	dm := internal.NewDownloadManager(url, fileName, workers)
 
@@ -49,9 +57,4 @@ func main() {
 			fmt.Println("Unknown command.")
 		}
 	}
-	//model := tui.NewMainStage()
-	//p := tea.NewProgram(model)
-	//if err := p.Start(); err != nil {
-	//	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-	//	os.Exit(1)
 }
