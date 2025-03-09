@@ -1,14 +1,15 @@
-package manager
+package internal
 
 import (
 	database2 "IDM/internal/database"
-	"IDM/internal/download"
-	"IDM/internal/queue"
 	"context"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -49,21 +50,66 @@ func NewDownloadManager(url string, fileName string, workers int) *DownloadManag
 	return d
 }
 
+func getFileNameFromHeader(resp *http.Response) (string, bool) {
+	contentDisp := resp.Header.Get("Content-Disposition")
+	if contentDisp == "" {
+		return "", false // it means server didn't send any contentDisp
+	}
+
+	// it returns the media type automatically!
+	mediaType, params, err := mime.ParseMediaType(contentDisp)
+	if err != nil {
+		return "", false
+	}
+
+	fmt.Println("DEBUGGING PRINT !!! MediaType is: ", mediaType)
+
+	filename, ok := params["filename"]
+	return filename, ok
+}
+
+func getFileNameFromURL(rawURL string) string {
+
+	parsedURL, err := url.Parse(rawURL)
+	if err != nil {
+		fmt.Println("Invalid URL:", err)
+		return "downloaded_file" // we're selecting a default name here // TODO random or smth else?
+	}
+
+	segments := strings.Split(parsedURL.Path, "/")
+	filename := segments[len(segments)-1]
+
+	if filename == "" || strings.Contains(filename, ".") == false {
+		return "downloaded_file" // same as above
+	}
+
+	return filename
+}
+
 /*
 http.Head() sends a HEAD request to server,
 and returns headResponse only (not file content)
 */
-func (dm *DownloadManager) getFileSize() error {
+func (dm *DownloadManager) GetFileSizeAndName() error {
 	headResp, err := http.Head(dm.URL)
 	if err != nil {
 		return err
 	}
+	defer headResp.Body.Close()
+
 	if headResp.StatusCode != http.StatusOK {
 		return fmt.Errorf("failed to get file info: server returned %d - %s", headResp.StatusCode, headResp.Status)
 	}
 
 	dm.FileSize = headResp.ContentLength // converting response to int!
 	dm.ChunkSize = dm.FileSize / int64(dm.Workers)
+
+	if filename, ok := getFileNameFromHeader(headResp); ok {
+		dm.FileName = filename
+	} else {
+		dm.FileName = getFileNameFromURL(dm.URL)
+	}
+
 	return nil
 }
 
@@ -143,11 +189,11 @@ func (dm *DownloadManager) downloadChunk(start int64, end int64, partNum int, wg
 	fmt.Printf("Downloaded [%d] [%d] bytes by goroutine %d\n", start, end, partNum)
 }
 
-func (dm *DownloadManager) StartDownload(download download.Download) error {
+func (dm *DownloadManager) StartDownload(download Download) error {
 	fmt.Println("Download started...")
 
 	// Just for error handling at first, and filling dm.FileSize at the end
-	err := dm.getFileSize()
+	err := dm.GetFileSizeAndName()
 	if err != nil {
 		return err
 	}
@@ -206,12 +252,12 @@ func (dm *DownloadManager) CancelDownload() {
 	fmt.Println("Download cancelled.")
 }
 
-func (dm *DownloadManager) changeDownloadStatus(download download.Download) {
+func (dm *DownloadManager) changeDownloadStatus(download Download) {
 	//TODO
 }
-func (dm *DownloadManager) deleteFromQueue(download download.Download, queue *queue.Queue) {
+func (dm *DownloadManager) deleteFromQueue(download Download, queue *Queue) {
 	//TODO
 }
-func (dm *DownloadManager) retry(download download.Download) {
+func (dm *DownloadManager) retry(download Download) {
 	//TODO
 }

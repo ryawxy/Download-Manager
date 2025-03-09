@@ -1,11 +1,10 @@
 package database
 
 import (
-	"IDM/internal/download"
-	"IDM/internal/queue"
+	"IDM/internal"
 )
 
 type DataBase struct {
-	QueuesList   []*queue.Queue
-	DownloadList []*download.Download
+	QueuesList   []*internal.Queue
+	DownloadList []*internal.Download
 }
