@@ -2,12 +2,11 @@ package commands
 
 import (
 	"IDM/internal"
-	database2 "IDM/internal/database"
 	"fmt"
 	"time"
 )
 
-var database database2.DataBase
+var database internal.DataBase
 
 func CreateQueue(id, folder string, maxConcurrent, bandwidth int) *internal.Queue {
 	startTime := time.Now()
