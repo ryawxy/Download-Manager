@@ -8,7 +8,7 @@ import (
 
 var database internal.DataBase
 
-func CreateQueue(id, folder string, maxConcurrent, bandwidth int) *internal.Queue {
+func CreateQueue(id, folder string, maxConcurrent int, bandwidth int64) *internal.Queue {
 	startTime := time.Now()
 	endTime := startTime.Add(24 * time.Hour)
 
@@ -30,7 +30,7 @@ func DeleteQueue(queues []*internal.Queue, id string) ([]*internal.Queue, error)
 	return queues, fmt.Errorf("queue with ID '%s' not found", id)
 }
 
-func ChangeQueueSettings(id string, numberOfFilesLimit int, directory string, bandwidth int, startTime, endTime time.Time) {
+func ChangeQueueSettings(id string, numberOfFilesLimit int, directory string, bandwidth int64, startTime, endTime time.Time) {
 	queues := database.QueuesList
 
 	var queueToUpdate *internal.Queue
