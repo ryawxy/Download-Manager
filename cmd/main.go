@@ -1,8 +1,7 @@
 package main
 
 import (
-	"IDM/internal/controller/manager"
-	"IDM/internal/download"
+	"IDM/internal"
 	"bufio"
 	"fmt"
 	"os"
@@ -19,10 +18,10 @@ func main() {
 	// TODO: program should extract the file name & format itself :(
 	fileName := "download_output.pdf"
 	workers := 4
-	dm := manager.NewDownloadManager(url, fileName, workers)
+	dm := internal.NewDownloadManager(url, fileName, workers)
 
 	go func() {
-		if err := dm.StartDownload(download.Download{}); err != nil {
+		if err := dm.StartDownload(internal.Download{}); err != nil {
 			fmt.Println("Error:", err)
 		}
 	}()

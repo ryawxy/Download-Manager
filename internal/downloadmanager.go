@@ -1,8 +1,6 @@
-package manager
+package internal
 
 import (
-	"IDM/internal/download"
-	"IDM/internal/queue"
 	"context"
 	"fmt"
 	"io"
@@ -13,7 +11,7 @@ import (
 )
 
 type DownloadManager struct {
-	Download  download.Download
+	Download  Download
 	ChunkSize int64 `json:"chunkSize"` // size that each worker process
 	Workers   int
 	Cancel    context.CancelFunc
@@ -29,7 +27,7 @@ better to implement at future i guess, we can create multiple DM
 */
 func NewDownloadManager(url string, fileName string, workers int) *DownloadManager {
 	ctx, cancel := context.WithCancel(context.Background())
-	download := download.Download{
+	download := Download{
 		URL:      url,
 		FileName: fileName,
 	}
@@ -137,7 +135,7 @@ func (dm *DownloadManager) downloadChunk(start int64, end int64, partNum int, wg
 	fmt.Printf("Downloaded [%d] [%d] bytes by goroutine %d\n", start, end, partNum)
 }
 
-func (dm *DownloadManager) StartDownload(download download.Download) error {
+func (dm *DownloadManager) StartDownload(download Download) error {
 	fmt.Println("Download started...")
 
 	// Just for error handling at first, and filling dm.FileSize at the end
@@ -200,12 +198,12 @@ func (dm *DownloadManager) CancelDownload() {
 	fmt.Println("Download cancelled.")
 }
 
-func (dm *DownloadManager) changeDownloadStatus(download download.Download) {
+func (dm *DownloadManager) changeDownloadStatus(download Download) {
 	//TODO
 }
-func (dm *DownloadManager) deleteFromQueue(download download.Download, queue *queue.Queue) {
+func (dm *DownloadManager) deleteFromQueue(download Download, queue *Queue) {
 	//TODO
 }
-func (dm *DownloadManager) retry(download download.Download) {
+func (dm *DownloadManager) retry(download Download) {
 	//TODO
 }
