@@ -1,26 +1,25 @@
 package main
 
 import (
-	"fmt"
 	"io"
 	"net/http"
 	"os"
 )
 
-func main() {
-	// TODO: user should input URL and fileName in the terminal (cli)
-	url := "https://ensani.ir/file/download/article/20160216093124-10017-18.pdf"
-	fileName := "download_test.pdf"
-
-	// TODO: user should select desired path itself.
-	err := downloadFile(url, fileName)
-	if err != nil {
-		fmt.Println("Error: ", err)
-	} else {
-		fmt.Println("Download success.")
-	}
-
-}
+//func main() {
+//	// TODO: user should input URL and fileName in the terminal (cli)
+//	url := "https://ensani.ir/file/download/article/20160216093124-10017-18.pdf"
+//	fileName := "download_test.pdf"
+//
+//	// TODO: user should select desired path itself.
+//	err := downloadFile(url, fileName)
+//	if err != nil {
+//		fmt.Println("Error: ", err)
+//	} else {
+//		fmt.Println("Download success.")
+//	}
+//
+//}
 
 func downloadFile(url string, fileName string) error {
 

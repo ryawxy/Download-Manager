@@ -3,15 +3,13 @@ package main
 import (
 	"IDM/internal/controller/manager"
 	"IDM/internal/download"
-	"IDM/internal/tui"
 	"bufio"
 	"fmt"
-	tea "github.com/charmbracelet/bubbletea"
 	"os"
 	"strings"
 )
 
-func theirMain() {
+func main() {
 
 	//var d download.Download = download.Download{
 	//	URL:      "asdfffgg",
@@ -26,16 +24,10 @@ func theirMain() {
 	url, _ := reader.ReadString('\n')
 	url = strings.TrimSpace(url)
 
+	// TODO: program should extract the file name & format itself :(
+	fileName := "download_output.mp3"
 	workers := 4
-	dm := manager.NewDownloadManager(url, "", workers)
-
-	err := dm.GetFileSizeAndName()
-	if err != nil {
-		fmt.Println("Error getting file info:", err)
-		return
-	}
-
-	fmt.Printf("Downloading file: %s\n", dm.FileName)
+	dm := manager.NewDownloadManager(url, fileName, workers)
 
 	go func() {
 		if err := dm.StartDownload(download.Download{}); err != nil {
@@ -66,19 +58,4 @@ func theirMain() {
 			fmt.Println("Unknown command.")
 		}
 	}
-}
-
-func myMain() {
-	model := tui.NewMainStage()
-
-	p := tea.NewProgram(model)
-	if err := p.Start(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-func main() {
-	//myMain()
-	theirMain()
 }
