@@ -2,17 +2,18 @@ package commands
 
 import (
 	"IDM/internal"
+	database2 "IDM/internal/database"
 	"fmt"
 	"time"
 )
 
-var database internal.DataBase
+var database database2.DataBase
 
-func CreateQueue(id, folder string, maxConcurrent int, bandwidth int64) *internal.Queue {
+func CreateQueue(id, folder string, maxConcurrent, bandwidth int) *internal.Queue {
 	startTime := time.Now()
 	endTime := startTime.Add(24 * time.Hour)
 
-	newQueue := internal.NewQueue(id, folder, maxConcurrent, bandwidth, startTime, endTime)
+	newQueue := internal.NewQueue(id, folder, maxConcurrent, int64(bandwidth), startTime, endTime)
 	return newQueue
 }
 func ShowQueues() []*internal.Queue {
@@ -30,7 +31,7 @@ func DeleteQueue(queues []*internal.Queue, id string) ([]*internal.Queue, error)
 	return queues, fmt.Errorf("queue with ID '%s' not found", id)
 }
 
-func ChangeQueueSettings(id string, numberOfFilesLimit int, directory string, bandwidth int64, startTime, endTime time.Time) {
+func ChangeQueueSettings(id string, numberOfFilesLimit int, directory string, bandwidth int, startTime, endTime time.Time) {
 	queues := database.QueuesList
 
 	var queueToUpdate *internal.Queue
@@ -45,7 +46,7 @@ func ChangeQueueSettings(id string, numberOfFilesLimit int, directory string, ba
 		return
 	}
 
-	err := queueToUpdate.UpdateSettings(numberOfFilesLimit, directory, bandwidth, startTime, endTime)
+	err := queueToUpdate.UpdateSettings(numberOfFilesLimit, directory, int64(bandwidth), startTime, endTime)
 	if err != nil {
 		return
 	}

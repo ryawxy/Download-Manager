@@ -1,6 +1,7 @@
 package internal
 
 import (
+	database2 "IDM/internal/database"
 	"context"
 	"fmt"
 	"io"
@@ -25,7 +26,7 @@ type DownloadManager struct {
 	Paused    bool `json:"paused"` // our goroutines must check this field...
 }
 
-var database DataBase
+var database database2.DataBase
 
 /*
 	NewDownloadManager is just a simple constructor, dont worry :)
