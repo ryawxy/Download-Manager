@@ -6,14 +6,14 @@ import (
 )
 
 type TokenBucket struct {
-	Capacity   int64
+	Capacity   int
 	Rate       time.Duration
-	Tokens     int64
+	Tokens     int
 	LastRefill time.Time
 	mu         sync.Mutex
 }
 
-func NewTokenBucket(capacity int64, rate time.Duration) *TokenBucket {
+func NewTokenBucket(capacity int, rate time.Duration) *TokenBucket {
 	return &TokenBucket{
 		Capacity:   capacity,
 		Rate:       rate,
@@ -25,7 +25,7 @@ func NewTokenBucket(capacity int64, rate time.Duration) *TokenBucket {
 func (tb *TokenBucket) refill() {
 	now := time.Now()
 	elapsed := now.Sub(tb.LastRefill)
-	tokensToAdd := int64(elapsed / tb.Rate)
+	tokensToAdd := int(elapsed / tb.Rate)
 
 	if tokensToAdd > 0 {
 		tb.Tokens = min(tb.Tokens+tokensToAdd, tb.Capacity)
@@ -33,7 +33,7 @@ func (tb *TokenBucket) refill() {
 	}
 }
 
-func (tb *TokenBucket) Take(tokens int64) bool {
+func (tb *TokenBucket) Take(tokens int) bool {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 

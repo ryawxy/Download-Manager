@@ -1,45 +1,74 @@
 package internal
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 )
 
 type Queue struct {
-	Id                 string //TODO:random String generator
-	Downloads          []*Download
-	Directory          string
-	NumberOfFilesLimit int
-	BandwidthLimit     int64
-	NumberOfTriesLimit int
-	StartTime          time.Time
-	EndTime            time.Time
-	TokenBucket        *TokenBucket
-
-	mutex sync.Mutex
+	Id                     string
+	Downloads              []*Download
+	Directory              string
+	NumberOfFilesLimit     int
+	BandwidthLimit         int
+	NumberOfTriesLimit     int
+	StartTime              time.Time
+	EndTime                time.Time
+	MaxConcurrentDownloads int
+	TokenBucket            *TokenBucket
+	mutex                  sync.Mutex
+	CancelFunc             func()
 }
 
-func NewQueue(id, directory string, numberOfFilesLimit int, bandwidthLimit int64, startTime, endTime time.Time) *Queue {
+func NewQueue(id, directory string, numberOfFilesLimit int, bandwidthLimit int, maxConcurrent int, startTime, endTime time.Time) *Queue {
 	rate := time.Second / time.Duration(bandwidthLimit)
 
 	return &Queue{
-		Id:                 id,
-		Downloads:          make([]*Download, 0),
-		NumberOfFilesLimit: numberOfFilesLimit,
-		Directory:          directory,
-		BandwidthLimit:     bandwidthLimit,
-		StartTime:          startTime,
-		EndTime:            endTime,
-		TokenBucket:        NewTokenBucket(bandwidthLimit, rate),
+		Id:                     id,
+		Downloads:              make([]*Download, 0),
+		NumberOfFilesLimit:     numberOfFilesLimit,
+		Directory:              directory,
+		BandwidthLimit:         bandwidthLimit,
+		MaxConcurrentDownloads: maxConcurrent,
+		StartTime:              startTime,
+		EndTime:                endTime,
+		TokenBucket:            NewTokenBucket(bandwidthLimit, rate),
 	}
 }
+
+func (q *Queue) StopDownloads() {
+	if q.CancelFunc != nil {
+		q.CancelFunc()
+		fmt.Println("Downloads in queue", q.Id, "stopped due to end time.")
+	}
+}
+
+func (q *Queue) EditQueue(maxConcurrent int, startTime, endTime time.Time, bandwidthLimit int) error {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	q.MaxConcurrentDownloads = maxConcurrent
+	q.StartTime = startTime
+	q.EndTime = endTime
+	q.BandwidthLimit = bandwidthLimit
+
+	rate := time.Second / time.Duration(bandwidthLimit)
+	q.TokenBucket = NewTokenBucket(bandwidthLimit, rate)
+
+	fmt.Println("Queue", q.Id, "updated successfully.")
+	return nil
+}
+
 func (q *Queue) AddDownload(d *Download) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 	q.Downloads = append(q.Downloads, d)
 	return nil
 }
+
 func (q *Queue) RemoveDownload(name string) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
@@ -51,15 +80,81 @@ func (q *Queue) RemoveDownload(name string) error {
 	}
 	return errors.New("download not found")
 }
-func (q *Queue) UpdateSettings(numberOfFilesLimit int, directory string, bandwidth int64, startTime, endTime time.Time) error {
-	q.mutex.Lock()
-	defer q.mutex.Unlock()
+func StartQueueDownloads(q *Queue) {
+	fmt.Println("Starting downloads in queue:", q.Id)
 
-	q.NumberOfTriesLimit = numberOfFilesLimit
-	q.Directory = directory
-	q.BandwidthLimit = bandwidth
-	q.StartTime = startTime
-	q.EndTime = endTime
+	sem := make(chan struct{}, q.MaxConcurrentDownloads)
+	var wg sync.WaitGroup
+	ctx, cancel := context.WithCancel(context.Background())
+	q.CancelFunc = cancel
 
-	return nil
+	time.AfterFunc(time.Until(q.EndTime), func() {
+		q.StopDownloads()
+	})
+
+	for _, d := range q.Downloads {
+		wg.Add(1)
+		sem <- struct{}{}
+
+		go func(d *Download) {
+			defer wg.Done()
+			dm := NewDownloadManager(d.URL, d.FileName, 4)
+			dm.Ctx = ctx
+
+			err := dm.GetFileSizeAndName()
+			if err != nil {
+				fmt.Println("Error getting file info for", d.URL)
+				<-sem
+				return
+			}
+
+			fmt.Printf("Downloading file: %s\n", dm.FileName)
+			if err := dm.StartDownload(*d); err != nil {
+				fmt.Println("Error:", err)
+			}
+
+			<-sem
+		}(d)
+	}
+
+	wg.Wait()
+	fmt.Println("All downloads completed in queue:", q.Id)
+}
+func ScheduleQueueDownloads(q *Queue) {
+	now := time.Now()
+	delay := q.StartTime.Sub(now)
+	if delay <= 0 {
+		StartQueueDownloads(q)
+	} else {
+		fmt.Println("Queue", q.Id, "will start in", delay)
+		time.AfterFunc(delay, func() {
+			StartQueueDownloads(q)
+		})
+	}
+}
+func ListQueues() {
+	fmt.Println("\n----- Available QueuesList -----")
+	if len(QueuesList) == 0 {
+		fmt.Println("No queues available.")
+		return
+	}
+
+	for name, q := range QueuesList {
+		fmt.Printf("Queue Name: %s\n", name)
+		fmt.Printf("  - Number of Downloads: %d\n", len(q.Downloads))
+		fmt.Printf("  - Max Concurrent Downloads: %d\n", q.MaxConcurrentDownloads)
+		fmt.Printf("  - Bandwidth Limit: %d bytes/sec\n", q.BandwidthLimit)
+		fmt.Printf("  - File Limit: %d\n", q.NumberOfFilesLimit)
+		fmt.Printf("  - Start Time: %s\n", q.StartTime.Format("15:04:05"))
+		fmt.Printf("  - End Time: %s\n", q.EndTime.Format("15:04:05"))
+		fmt.Println("-------------------------------")
+	}
+}
+func DeleteQueue(queueName string) {
+	if _, exists := QueuesList[queueName]; exists {
+		delete(QueuesList, queueName)
+		fmt.Println("Queue", queueName, "deleted successfully.")
+	} else {
+		fmt.Println("Queue not found!")
+	}
 }
