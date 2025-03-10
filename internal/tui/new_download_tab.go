@@ -84,8 +84,6 @@ func (n NewDownloadTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "left":
 			n.isActive = false
 			n.cursor = -1
-		case "ctrl+c":
-			return n, tea.Quit
 		case "enter":
 			//todo call new_download function
 		}

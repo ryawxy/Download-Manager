@@ -201,9 +201,6 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				//todo call the correct function
 			}
 			d.showOptions = !d.showOptions
-
-		case "ctrl+c":
-			return d, tea.Quit
 		}
 	}
 	if d.cursor < d.pageStart {
