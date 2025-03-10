@@ -1,7 +1,6 @@
-package manager
+package internal
 
 import (
-	"IDM/internal"
 	"encoding/json"
 	"os"
 	"sync"
@@ -12,7 +11,7 @@ type Storage struct {
 
 var mu sync.Mutex
 
-func SaveData(d *internal.DownloadManager) error {
+func SaveData(d *DownloadManager) error {
 	mu.Lock()
 	defer mu.Unlock()
 
