@@ -9,6 +9,7 @@ const (
 	Failed     Status = "failed"
 	InProgress Status = "inProgress"
 	Completed  Status = "completed"
+	Pending    Status = "pending"
 )
 
 type Download struct {

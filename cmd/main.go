@@ -10,6 +10,12 @@ import (
 )
 
 func main() {
+
+	err := internal.LoadQueuesFromFile()
+	if err != nil {
+		fmt.Println("Error loading queues:", err)
+	}
+
 	reader := bufio.NewReader(os.Stdin)
 	for {
 		fmt.Print("Enter command (create <queue_name> <max_concurrent_downloads> <start_time> <end_time> / edit <queue_name> <max_concurrent_downloads> <start_time> <end_time> <bandwidth_limit> / delete <queue_name> / list / done): ")
