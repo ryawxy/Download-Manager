@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"IDM/internal/queue"
+	"IDM/internal"
 	"fmt"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -14,23 +14,23 @@ import (
 // QueuesTab todo implement newQueue button
 
 type QueuesTab struct {
-	queues                                    []queue.Queue
+	queues                                    []internal.Queue
 	queueCursor, contentCursor, buttonsCursor int
 	isActive                                  bool
 	controlContent                            bool
 	inputs                                    []textinput.Model
 }
 
-func temporaryRandomQueues() []queue.Queue {
-	return []queue.Queue{
+func temporaryRandomQueues() []internal.Queue {
+	return []internal.Queue{
 		{Id: "queue1", Directory: "Downloads/queue1", NumberOfFilesLimit: 5, BandwidthLimit: 1000, NumberOfTriesLimit: 3, StartTime: time.Now(), EndTime: time.Now().Add(2 * time.Hour)},
 		{Id: "queue2", Directory: "Downloads/queue2", NumberOfFilesLimit: 10, BandwidthLimit: 2000, NumberOfTriesLimit: 2, StartTime: time.Now(), EndTime: time.Now().Add(3 * time.Hour)},
 		{Id: "queue3", Directory: "Downloads/queue3", NumberOfFilesLimit: 7, BandwidthLimit: 1500, NumberOfTriesLimit: 4, StartTime: time.Now(), EndTime: time.Now().Add(1 * time.Hour)},
 	}
 }
 
-func getNewQueue() queue.Queue {
-	return queue.Queue{
+func getNewQueue() internal.Queue {
+	return internal.Queue{
 		Id:                 "newQueue",
 		Directory:          "Downloads",
 		NumberOfFilesLimit: -1,

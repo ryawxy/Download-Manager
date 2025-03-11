@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"IDM/internal/download"
+	"IDM/internal"
 	"fmt"
 	"github.com/charmbracelet/bubbles/progress"
 	"strings"
@@ -12,7 +12,7 @@ import (
 )
 
 type DownloadsTab struct {
-	downloads     []download.Download
+	downloads     []internal.Download
 	cursor        int
 	isActive      bool
 	pageStart     int
@@ -21,12 +21,12 @@ type DownloadsTab struct {
 }
 
 // Generate sample downloads
-func generateRandomDownloads(n int) []download.Download {
-	downloads := make([]download.Download, n)
+func generateRandomDownloads(n int) []internal.Download {
+	downloads := make([]internal.Download, n)
 	for i := 0; i < n; i++ {
-		downloads[i] = download.Download{
-			Filename:   fmt.Sprintf("File %d", i),
-			Status:     download.Status(download.InProgress),
+		downloads[i] = internal.Download{
+			FileName:   fmt.Sprintf("File %d", i),
+			Status:     internal.Status(internal.InProgress),
 			Progress:   int64(i * 10),
 			TotalBytes: int64(100),
 			StartTime:  time.Now(),
@@ -65,8 +65,8 @@ func NewDownloadsTab() DownloadsTab {
 }
 
 // calculateTimeLeft estimates time left for a download
-func calculateTimeLeft(d download.Download) string {
-	if d.Status == download.InProgress && d.Progress > 0 {
+func calculateTimeLeft(d internal.Download) string {
+	if d.Status == internal.InProgress && d.Progress > 0 {
 		elapsed := time.Since(d.StartTime).Seconds()
 		total := float64(d.TotalBytes) / float64(d.Progress) * 100
 		remaining := total - elapsed
@@ -78,15 +78,15 @@ func calculateTimeLeft(d download.Download) string {
 // Column widths
 var colWidths = []int{10, 6, 30, 10, 12}
 
-func getActions(status download.Status) []string {
+func getActions(status internal.Status) []string {
 	switch status {
-	case download.Completed:
+	case internal.Completed:
 		return []string{"Delete", "Back"}
-	case download.Failed:
+	case internal.Failed:
 		return []string{"Retry", "Delete", "Back"}
-	case download.Paused:
+	case internal.Paused:
 		return []string{"Cancel", "Resume", "Back"}
-	case download.InProgress:
+	case internal.InProgress:
 		return []string{"Pause", "Cancel", "Back"}
 	default:
 		return []string{}
@@ -116,7 +116,7 @@ func (d DownloadsTab) RenderTable() string {
 			continue
 		}
 		styledRow := []string{
-			selectedRowStyle.Copy().Width(colWidths[0]).Render(entry.Filename[max(len(entry.Filename)-20, 0):]),
+			selectedRowStyle.Copy().Width(colWidths[0]).Render(entry.FileName[max(len(entry.FileName)-20, 0):]),
 			selectedRowStyle.Copy().Width(colWidths[1]).Render(fmt.Sprintf("%d", i+1)),
 			selectedRowStyle.Copy().Width(colWidths[2]).Render(progressBar.ViewAs(float64(entry.Progress) / 100.0)),
 			selectedRowStyle.Copy().Width(colWidths[3]).Render(calculateTimeLeft(entry)),
@@ -144,7 +144,7 @@ func (d DownloadsTab) RenderTable() string {
 			table += "\n"
 		} else {
 			row := []string{
-				rowStyle.Copy().Width(colWidths[0]).Render(entry.Filename),
+				rowStyle.Copy().Width(colWidths[0]).Render(entry.FileName),
 				rowStyle.Copy().Width(colWidths[1]).Render(fmt.Sprintf("%d", i+1)),
 				rowStyle.Copy().Width(colWidths[2]).Render(progressBar.ViewAs(float64(entry.Progress) / 100.0)),
 				rowStyle.Copy().Width(colWidths[3]).Render(calculateTimeLeft(entry)),
