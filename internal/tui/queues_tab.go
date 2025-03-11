@@ -11,7 +11,6 @@ import (
 )
 
 //if you were in the mood, cleanup controls
-// QueuesTab todo show at most 10 queues at a time
 // QueuesTab todo implement newQueue button
 
 type QueuesTab struct {
@@ -27,12 +26,24 @@ func temporaryRandomQueues() []queue.Queue {
 		{Id: "queue1", Directory: "Downloads/queue1", NumberOfFilesLimit: 5, BandwidthLimit: 1000, NumberOfTriesLimit: 3, StartTime: time.Now(), EndTime: time.Now().Add(2 * time.Hour)},
 		{Id: "queue2", Directory: "Downloads/queue2", NumberOfFilesLimit: 10, BandwidthLimit: 2000, NumberOfTriesLimit: 2, StartTime: time.Now(), EndTime: time.Now().Add(3 * time.Hour)},
 		{Id: "queue3", Directory: "Downloads/queue3", NumberOfFilesLimit: 7, BandwidthLimit: 1500, NumberOfTriesLimit: 4, StartTime: time.Now(), EndTime: time.Now().Add(1 * time.Hour)},
-		{Id: "newQueue", Directory: "", NumberOfFilesLimit: 0, BandwidthLimit: 0, NumberOfTriesLimit: 0, StartTime: time.Now(), EndTime: time.Now()},
+	}
+}
+
+func getNewQueue() queue.Queue {
+	return queue.Queue{
+		Id:                 "newQueue",
+		Directory:          "Downloads",
+		NumberOfFilesLimit: -1,
+		BandwidthLimit:     -1,
+		NumberOfTriesLimit: -1,
+		StartTime:          time.Now(),
+		EndTime:            time.Now(),
 	}
 }
 
 func NewQueuesTab() QueuesTab {
 	queues := temporaryRandomQueues()
+	queues = append(queues, getNewQueue())
 	inputs := make([]textinput.Model, 6)
 	for i := range inputs {
 		inputs[i] = textinput.New()
@@ -101,36 +112,30 @@ func (q QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "up":
-			if !q.controlContent && q.queueCursor > 0 {
-				q.queueCursor--
+			if !q.controlContent {
+				q.queueCursor = (q.queueCursor + len(q.queues) - 1) % len(q.queues)
 				q.setInputs()
-			} else if !q.controlContent && q.queueCursor == 0 {
-				q.queueCursor = len(q.queues) - 1
-				q.setInputs()
-			} else if q.controlContent && q.contentCursor > 0 {
+			} else {
 				if q.contentCursor == len(q.inputs) {
 					q.buttonsCursor = -1
 				}
-				q.contentCursor--
-			} else if q.controlContent && q.contentCursor == 0 {
-				q.contentCursor = len(q.inputs)
-				q.buttonsCursor = 0
-			}
-		case "down":
-			if !q.controlContent && q.queueCursor < len(q.queues)-1 {
-				q.queueCursor++
-				q.setInputs()
-			} else if !q.controlContent && q.queueCursor == len(q.queues)-1 {
-				q.queueCursor = 0
-				q.setInputs()
-			} else if q.controlContent && q.contentCursor < len(q.inputs) {
-				q.contentCursor++
+				q.contentCursor = (q.contentCursor + len(q.inputs)) % (len(q.inputs) + 1)
 				if q.contentCursor == len(q.inputs) {
 					q.buttonsCursor = 0
 				}
-			} else if q.controlContent && q.contentCursor == len(q.inputs) {
-				q.contentCursor = 0
-				q.buttonsCursor = -1
+			}
+		case "down":
+			if !q.controlContent {
+				q.queueCursor = (q.queueCursor + 1) % len(q.queues)
+				q.setInputs()
+			} else {
+				if q.contentCursor == len(q.inputs) {
+					q.buttonsCursor = -1
+				}
+				q.contentCursor = (q.contentCursor + 1) % (len(q.inputs) + 1)
+				if q.contentCursor == len(q.inputs) {
+					q.buttonsCursor = 0
+				}
 			}
 		case "right":
 			if q.contentCursor == len(q.inputs) {
@@ -189,8 +194,11 @@ func (q QueuesTab) View() string {
 		}
 	}
 	buttons := []string{"Start All", "Pause All", "Delete"}
+	if q.queueCursor == len(q.queues)-1 {
+		buttons = []string{"Create"}
+	}
 	for i, button := range buttons {
-		if q.buttonsCursor == i {
+		if q.buttonsCursor != -1 && q.buttonsCursor%len(buttons) == i {
 			queueContent += selectedStyle.Render("["+button+"]") + "  "
 		} else {
 			queueContent += style.Render("["+button+"]") + "  "
@@ -198,4 +206,8 @@ func (q QueuesTab) View() string {
 	}
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, queueList, "   ", queueContent)
+}
+
+func (q QueuesTab) getFooter() string {
+	return "Press '→' to select, '←' to go back, '↑ / ↓' to navigate"
 }

@@ -136,3 +136,7 @@ func (n NewDownloadTab) View() string {
 func (n NewDownloadTab) toString() string {
 	return "New Download"
 }
+
+func (n NewDownloadTab) getFooter() string {
+	return "Use '↑ / ↓' to navigate, " + "Press Enter to start download"
+}

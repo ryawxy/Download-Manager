@@ -1,6 +1,5 @@
 package tui
 
-//todo implement footer
 //todo update README.md
 
 import (
@@ -16,6 +15,7 @@ type Tab interface {
 	toString() string
 	setActive(bool) Tab
 	isActivated() bool
+	getFooter() string
 }
 
 type MainStage struct {
@@ -108,7 +108,7 @@ func (m MainStage) View() string {
 	content := m.tabs[m.currentTab].View()
 
 	// Footer text
-	footerText := fmt.Sprintf(" Active Tab: %s | Use ↑ ↓ to navigate, → to activate | Press Ctrl+C to exit ", m.tabs[m.currentTab].toString())
+	footerText := fmt.Sprintf(" Active Tab: %s %s", m.tabs[m.currentTab].toString(), m.tabs[m.currentTab].getFooter())
 	footer := footerStyle.Render(footerText)
 
 	// Properly position footer at the **BOTTOM** of the terminal

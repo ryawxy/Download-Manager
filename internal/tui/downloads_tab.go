@@ -11,8 +11,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-//todo implement (retry, pause, resume, cancel) buttons
-
 type DownloadsTab struct {
 	downloads     []download.Download
 	cursor        int
@@ -237,4 +235,8 @@ func (d DownloadsTab) toString() string {
 
 func (d DownloadsTab) Init() tea.Cmd {
 	return nil
+}
+
+func (d DownloadsTab) getFooter() string {
+	return "Use '↑ / ↓' to navigate, " + "Press 'Enter' to show options"
 }
