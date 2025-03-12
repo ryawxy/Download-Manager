@@ -28,9 +28,9 @@ type DownloadManager struct {
 var database DataBase
 
 /*
-	NewDownloadManager is just a simple constructor, dont worry :)
+	NewDownloadManager is just a simple constructor, don't worry :)
 
-better to implement at future i guess, we can create multiple DM
+better to implement at future I guess, we can create multiple DM
 */
 func NewDownloadManager(url string, fileName string, workers int) *DownloadManager {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -137,7 +137,7 @@ func (dm *DownloadManager) downloadChunk(start int64, end int64, partNum int, wg
 		fmt.Println("Error creating file part:", err)
 		return
 	}
-	// dont forget to close files at the end!
+	// don't forget to close files at the end!
 	defer func(file *os.File) {
 		err := file.Close()
 		if err != nil {
@@ -257,6 +257,22 @@ func (dm *DownloadManager) changeDownloadStatus(download Download) {
 func (dm *DownloadManager) deleteFromQueue(download Download, queue *Queue) {
 	//TODO
 }
-func (dm *DownloadManager) retry(download Download) {
-	//TODO
+func (dm *DownloadManager) retry(download *Download) {
+	if download.Status != Failed {
+		fmt.Println("Retry not allowed, download isn't in failed status")
+		return
+	}
+
+	fmt.Printf("Retrying download: %s\n", download.FileName)
+	download.Status = InProgress
+
+	err := dm.StartDownload(*download)
+	if err != nil {
+		fmt.Println("Retry failed:", err)
+		download.Status = Failed
+		return
+	}
+
+	download.Status = Completed
+	fmt.Println("Retry successful:", download.FileName)
 }
