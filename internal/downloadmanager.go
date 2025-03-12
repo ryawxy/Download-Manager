@@ -251,12 +251,27 @@ func (dm *DownloadManager) CancelDownload() {
 	fmt.Println("Download cancelled.")
 }
 
-func (dm *DownloadManager) changeDownloadStatus(download Download) {
-	//TODO
+func (dm *DownloadManager) changeDownloadStatus(download *Download) {
+	dm.Mutex.Lock()
+	defer dm.Mutex.Unlock()
+
+	if download.Progress == 0 {
+		download.Status = Pending
+	} else if download.Progress > 0 && download.Progress < download.TotalBytes {
+		download.Status = InProgress
+	} else if download.Progress >= download.TotalBytes {
+		download.Status = Completed
+	} else {
+		download.Status = Failed
+	}
+
+	fmt.Printf("Download status updated: %s -> %s\n", download.FileName, download.Status)
 }
+
 func (dm *DownloadManager) deleteFromQueue(download Download, queue *Queue) {
 	//TODO
 }
+
 func (dm *DownloadManager) retry(download *Download) {
 	if download.Status != Failed {
 		fmt.Println("Retry not allowed, download isn't in failed status")
