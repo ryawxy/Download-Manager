@@ -108,15 +108,21 @@ func main() {
 	}
 	fmt.Println("Downloads assigned to queue:", queueName)
 	for {
-		fmt.Print("Enter command (start <queue_name> / list / exit): ")
+		fmt.Print("Enter command (start <queue_name> / pause <queue_name> / resume <queue_name> / list / exit): ")
 		command, _ := reader.ReadString('\n')
 		command = strings.TrimSpace(command)
 
 		parts := strings.SplitN(command, " ", 2)
-		if len(parts) == 2 && parts[0] == "start" {
+		if len(parts) == 2 {
 			qName := parts[1]
 			if q, ok := internal.QueuesList[qName]; ok {
-				internal.ScheduleQueueDownloads(q)
+				if parts[0] == "pause" {
+					q.PauseQueue()
+				} else if parts[0] == "resume" {
+					q.ResumeQueue()
+				} else if parts[0] == "start" {
+					internal.ScheduleQueueDownloads(q)
+				}
 			} else {
 				fmt.Println("Queue not found!")
 			}

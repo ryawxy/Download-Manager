@@ -21,6 +21,7 @@ type Queue struct {
 	TokenBucket            *TokenBucket `json:"-"`
 	mutex                  sync.Mutex   `json:"-"`
 	CancelFunc             func()       `json:"-"`
+	Paused                 bool         `json:"paused"`
 }
 
 func NewQueue(id, directory string, numberOfFilesLimit int, bandwidthLimit int, maxConcurrent int, startTime, endTime time.Time) *Queue {
@@ -93,8 +94,15 @@ func (q *Queue) RemoveDownload(name string) error {
 	return errors.New("download not found")
 }
 func StartQueueDownloads(q *Queue) {
-	fmt.Println("Starting downloads in queue:", q.Id)
+	q.mutex.Lock()
+	if q.Paused {
+		fmt.Printf("Queue %s is paused. Downloads won't start", q.Id)
+		q.mutex.Unlock()
+		return
+	}
+	q.mutex.Unlock()
 
+	fmt.Println("Starting downloads in queue:", q.Id)
 	sem := make(chan struct{}, q.MaxConcurrentDownloads)
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
@@ -110,6 +118,17 @@ func StartQueueDownloads(q *Queue) {
 
 		go func(d *Download) {
 			defer wg.Done()
+
+			q.mutex.Lock()
+			if q.Paused {
+				fmt.Println("Queue is paused, stopping download:", d.FileName)
+				q.mutex.Unlock()
+				<-sem
+				return
+			}
+			q.mutex.Unlock()
+
+			// TODO generalize number of threads at the end (instead of 4)
 			dm := NewDownloadManager(d.URL, d.FileName, 4)
 			dm.Ctx = ctx
 
@@ -132,6 +151,38 @@ func StartQueueDownloads(q *Queue) {
 	wg.Wait()
 	fmt.Println("All downloads completed in queue:", q.Id)
 }
+
+func (q *Queue) PauseQueue() {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	if q.Paused {
+		fmt.Println("Queue is already paused")
+		return
+	}
+
+	q.Paused = true
+	if q.CancelFunc != nil {
+		q.CancelFunc() // it will cancel all ongoing downloads
+	}
+
+	fmt.Printf("Queue %s paused successfully\n", q.Id)
+}
+
+func (q *Queue) ResumeQueue() {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	if !q.Paused {
+		fmt.Println("Queue is already running")
+		return
+	}
+
+	q.Paused = false
+	fmt.Printf("Queue %s resumed successfully\n", q.Id)
+	go StartQueueDownloads(q) // starting again
+}
+
 func ScheduleQueueDownloads(q *Queue) {
 	now := time.Now()
 	delay := q.StartTime.Sub(now)
