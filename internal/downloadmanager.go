@@ -8,22 +8,19 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 )
 
 type DownloadManager struct {
-	ChunkSize       int64 `json:"chunkSize"` // size that each worker process
-	Workers         int
-	Cancel          context.CancelFunc
-	Ctx             context.Context
-	Mutex           sync.Mutex
-	Paused          bool  `json:"paused"` // our goroutines must check this field...
-	DownloadedBytes int64 // a common variable among goroutines
+	ChunkSize int64 `json:"chunkSize"` // size that each worker process
+	Workers   int
+	Cancel    context.CancelFunc
+	Ctx       context.Context
+	Mutex     sync.Mutex
 }
-
-var database DataBase
 
 /*
 	NewDownloadManager is just a simple constructor, don't worry :)
@@ -36,7 +33,6 @@ func (download *Download) NewDownloadManager(workers int) *DownloadManager {
 		Workers: workers,
 		Cancel:  cancel,
 		Ctx:     ctx,
-		Paused:  false,
 	}
 
 	return download.Manager
@@ -114,7 +110,6 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 		return
 	}
 
-	// setting the process range for each goroutine
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
 
 	resp, err := http.DefaultClient.Do(req)
@@ -122,29 +117,21 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 		fmt.Println("Error during download:", err)
 		return
 	}
-	// response body must be closed at the end
 	defer resp.Body.Close()
 
-	file, err := os.Create(fmt.Sprintf("%s.part%d", download.FileName, partNum))
+	fullPath := filepath.Join(download.Directory, fmt.Sprintf("%s.part%d", download.FileName, partNum))
+	file, err := os.Create(fullPath)
 	if err != nil {
 		fmt.Println("Error creating file part:", err)
 		return
 	}
-	// don't forget to close files at the end!
-	defer func(file *os.File) {
-		err := file.Close()
-		if err != nil {
-			fmt.Println("Error closing file:", err)
-		}
-	}(file)
+	defer file.Close()
 
 	buf := make([]byte, 1024)
 	for {
-		// When we pause download, we should stop goroutines sequentially by lock/unlock
 		download.Manager.Mutex.Lock()
 		for download.Paused {
 			download.Manager.Mutex.Unlock()
-			//fmt.Printf("Goroutine %d paused...\n", partNum)
 			select {
 			case <-download.Manager.Ctx.Done():
 				fmt.Println("Download cancelled.")
@@ -156,12 +143,8 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 		}
 		download.Manager.Mutex.Unlock()
 
-		/* try to get at most len(buf) bytes data from server
-		n is the actual number of bytes read (could be lower than len(buf))
-		*/
 		n, err := resp.Body.Read(buf)
 		if err != nil {
-			// EOF stands for End Of File (complete)
 			if err == io.EOF {
 				break
 			}
@@ -169,7 +152,6 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 			return
 		}
 
-		// because n could be lower than len(buf), we just write the first n bytes of the buf slice
 		_, err = file.Write(buf[:n])
 		if err != nil {
 			fmt.Println("Error writing file part:", err)
@@ -187,20 +169,19 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 }
 
 func (download *Download) StartDownload() error {
-	fmt.Println("Download started...")
+	if err := os.MkdirAll(download.Directory, 0755); err != nil {
+		return fmt.Errorf("failed to create directory: %v", err)
+	}
 
-	// Just for error handling at first, and filling dm.FileSize at the end
 	err := download.GetFileSizeAndName()
 	if err != nil {
 		return err
 	}
 
 	var wg sync.WaitGroup
-	// اینجا میخوایم بگیم هر وورکر از کجا تا کجا بخونه، انگلیسی نتانم ۴ صبح :))
 	for i := 0; i < download.Manager.Workers; i++ {
 		start := int64(i) * download.Manager.ChunkSize
 		end := start + download.Manager.ChunkSize - 1
-		// handling last part
 		if end >= download.FileSize {
 			end = download.FileSize - 1
 		}
@@ -209,24 +190,21 @@ func (download *Download) StartDownload() error {
 		go download.downloadChunk(start, end, i, &wg)
 	}
 
-	// باید تردا وایسن تا کار همشون تموم شه، بعد ریترن کنیم
 	wg.Wait()
-
 	return mergeFiles(download)
 }
 
 func mergeFiles(download *Download) error {
-	fmt.Println("Merging downloaded chunks...")
-
-	outputFile, err := os.Create(download.FileName)
+	outputPath := filepath.Join(download.Directory, download.FileName)
+	outputFile, err := os.Create(outputPath)
 	if err != nil {
 		return err
 	}
 	defer outputFile.Close()
 
 	for i := 0; i < download.Manager.Workers; i++ {
-		partFileName := fmt.Sprintf("%s.part%d", download.FileName, i)
-		partFile, err := os.Open(partFileName)
+		partPath := filepath.Join(download.Directory, fmt.Sprintf("%s.part%d", download.FileName, i))
+		partFile, err := os.Open(partPath)
 		if err != nil {
 			return err
 		}
@@ -235,15 +213,13 @@ func mergeFiles(download *Download) error {
 		if err != nil {
 			return err
 		}
-
-		// this will help us to debug pause/resume features! (uncomment at the end)
-		//os.Remove(partFileName)
+		partFile.Close()
+		os.Remove(partPath)
 	}
 
 	fmt.Println("Download complete.")
 	return nil
 }
-
 func (download *Download) CancelDownload() {
 	download.Manager.Cancel()
 	fmt.Println("Download cancelled.")

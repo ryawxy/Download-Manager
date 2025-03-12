@@ -19,7 +19,7 @@ func main() {
 
 	reader := bufio.NewReader(os.Stdin)
 	for {
-		fmt.Print("Enter command (create <queue_name> <max_concurrent_downloads> <start_time> <end_time> / edit <queue_name> <max_concurrent_downloads> <start_time> <end_time> <bandwidth_limit> / delete <queue_name> / list / done): ")
+		fmt.Print("Enter command (create <queue_name> <max_concurrent_downloads> <start_time> <end_time> <directory> / edit <queue_name> <max_concurrent_downloads> <start_time> <end_time> <bandwidth_limit> / delete <queue_name> / list / done): ")
 		input, _ := reader.ReadString('\n')
 		input = strings.TrimSpace(input)
 
@@ -30,7 +30,7 @@ func main() {
 		parts := strings.SplitN(input, " ", 6)
 		if len(parts) == 1 && parts[0] == "list" {
 			internal.ListQueues()
-		} else if len(parts) == 5 && parts[0] == "create" {
+		} else if len(parts) == 6 && parts[0] == "create" {
 			queueName := parts[1]
 			var maxConcurrent int
 			fmt.Sscanf(parts[2], "%d", &maxConcurrent)
@@ -49,7 +49,7 @@ func main() {
 			if _, exists := internal.QueuesList[queueName]; exists {
 				fmt.Println("Queue already exists!")
 			} else {
-				internal.QueuesList[queueName] = internal.NewQueue(queueName, "./downloads", 10, 1024*1024, maxConcurrent, startTime, endTime)
+				internal.QueuesList[queueName] = internal.NewQueue(queueName, parts[5], 10, 1024*1024, maxConcurrent, startTime, endTime)
 				fmt.Println("Queue created:", queueName, "with max concurrent downloads:", maxConcurrent, "Start:", startTime.Format("15:04"), "End:", endTime.Format("15:04"))
 			}
 		} else if len(parts) == 6 && parts[0] == "edit" {
@@ -104,6 +104,7 @@ func main() {
 	}
 
 	for _, d := range internal.DownloadList {
+		d.Directory = queue.Directory
 		queue.AddDownload(d)
 	}
 	fmt.Println("Downloads assigned to queue:", queueName)

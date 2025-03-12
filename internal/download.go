@@ -22,5 +22,6 @@ type Download struct {
 	StartTime       time.Time
 	Manager         *DownloadManager `json:"manager"`
 	Paused          bool
-	DownloadedBytes int64 `json:"downloaded_bytes"`
+	DownloadedBytes int64  `json:"downloaded_bytes"`
+	Directory       string `json:"directory"`
 }

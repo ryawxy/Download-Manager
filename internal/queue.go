@@ -93,6 +93,7 @@ func (q *Queue) RemoveDownload(name string) error {
 	}
 	return errors.New("download not found")
 }
+
 func StartQueueDownloads(q *Queue) {
 	q.mutex.Lock()
 	if q.Paused {
@@ -116,7 +117,7 @@ func StartQueueDownloads(q *Queue) {
 		wg.Add(1)
 		sem <- struct{}{}
 
-		go func(d *Download) {
+		go func(d *Download, dir string) {
 			defer wg.Done()
 
 			q.mutex.Lock()
@@ -130,7 +131,6 @@ func StartQueueDownloads(q *Queue) {
 
 			// TODO generalize number of threads at the end (instead of 4)
 			d.NewDownloadManager(4)
-			//	dm := NewDownloadManager(d.URL, d.FileName, 4)
 			d.Manager.Ctx = ctx
 
 			err := d.GetFileSizeAndName()
@@ -146,7 +146,7 @@ func StartQueueDownloads(q *Queue) {
 			}
 
 			<-sem
-		}(d)
+		}(d, q.Directory)
 	}
 
 	wg.Wait()
