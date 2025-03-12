@@ -129,18 +129,19 @@ func StartQueueDownloads(q *Queue) {
 			q.mutex.Unlock()
 
 			// TODO generalize number of threads at the end (instead of 4)
-			dm := NewDownloadManager(d.URL, d.FileName, 4)
-			dm.Ctx = ctx
+			d.NewDownloadManager(4)
+			//	dm := NewDownloadManager(d.URL, d.FileName, 4)
+			d.Manager.Ctx = ctx
 
-			err := dm.GetFileSizeAndName()
+			err := d.GetFileSizeAndName()
 			if err != nil {
 				fmt.Println("Error getting file info for", d.URL)
 				<-sem
 				return
 			}
 
-			fmt.Printf("Downloading file: %s\n", dm.FileName)
-			if err := dm.StartDownload(*d); err != nil {
+			fmt.Printf("Downloading file: %s\n", d.FileName)
+			if err := d.StartDownload(); err != nil {
 				fmt.Println("Error:", err)
 			}
 

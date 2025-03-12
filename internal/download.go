@@ -13,11 +13,14 @@ const (
 )
 
 type Download struct {
-	URL        string `json:"URL"`
-	FileName   string `json:"FileName"`
-	FileSize   int64  `json:"FileSize"`
-	Status     Status `json:"status"`
-	Progress   int64  `json:"progress"`
-	TotalBytes int64  `json:"total_bytes"`
-	StartTime  time.Time
+	URL             string `json:"URL"`
+	FileName        string `json:"FileName"`
+	FileSize        int64  `json:"FileSize"`
+	Status          Status `json:"status"`
+	Progress        int64  `json:"progress"`
+	TotalBytes      int64  `json:"total_bytes"`
+	StartTime       time.Time
+	Manager         *DownloadManager `json:"manager"`
+	Paused          bool
+	DownloadedBytes int64 `json:"downloaded_bytes"`
 }

@@ -14,10 +14,7 @@ import (
 )
 
 type DownloadManager struct {
-	URL             string `json:"url"`
-	FileName        string `json:"fileName"`
-	FileSize        int64  `json:"fileSize"`  // whole file
-	ChunkSize       int64  `json:"chunkSize"` // size that each worker process
+	ChunkSize       int64 `json:"chunkSize"` // size that each worker process
 	Workers         int
 	Cancel          context.CancelFunc
 	Ctx             context.Context
@@ -33,21 +30,16 @@ var database DataBase
 
 better to implement at future I guess, we can create multiple DM
 */
-func NewDownloadManager(url string, fileName string, workers int) *DownloadManager {
+func (download *Download) NewDownloadManager(workers int) *DownloadManager {
 	ctx, cancel := context.WithCancel(context.Background())
-	d := &DownloadManager{
-		URL:      url,
-		FileName: fileName,
-		Workers:  workers,
-		Cancel:   cancel,
-		Ctx:      ctx,
-		Paused:   false,
+	download.Manager = &DownloadManager{
+		Workers: workers,
+		Cancel:  cancel,
+		Ctx:     ctx,
+		Paused:  false,
 	}
-	//err := SaveData(d)
-	//if err != nil {
-	//	return nil
-	//}
-	return d
+
+	return download.Manager
 }
 
 func getFileNameFromHeader(resp *http.Response) (string, bool) {
@@ -68,9 +60,9 @@ func getFileNameFromHeader(resp *http.Response) (string, bool) {
 	return filename, ok
 }
 
-func getFileNameFromURL(rawURL string) string {
+func (download *Download) getFileNameFromURL() string {
 
-	parsedURL, err := url.Parse(rawURL)
+	parsedURL, err := url.Parse(download.URL)
 	if err != nil {
 		fmt.Println("Invalid URL:", err)
 		return "downloaded_file" // we're selecting a default name here // TODO random or smth else?
@@ -90,8 +82,8 @@ func getFileNameFromURL(rawURL string) string {
 http.Head() sends a HEAD request to server,
 and returns headResponse only (not file content)
 */
-func (dm *DownloadManager) GetFileSizeAndName() error {
-	headResp, err := http.Head(dm.URL)
+func (download *Download) GetFileSizeAndName() error {
+	headResp, err := http.Head(download.URL)
 	if err != nil {
 		return err
 	}
@@ -101,22 +93,22 @@ func (dm *DownloadManager) GetFileSizeAndName() error {
 		return fmt.Errorf("failed to get file info: server returned %d - %s", headResp.StatusCode, headResp.Status)
 	}
 
-	dm.FileSize = headResp.ContentLength // converting response to int!
-	dm.ChunkSize = dm.FileSize / int64(dm.Workers)
+	download.FileSize = headResp.ContentLength // converting response to int!
+	download.Manager.ChunkSize = download.FileSize / int64(download.Manager.Workers)
 
 	if filename, ok := getFileNameFromHeader(headResp); ok {
-		dm.FileName = filename
+		download.FileName = filename
 	} else {
-		dm.FileName = getFileNameFromURL(dm.URL)
+		download.FileName = download.getFileNameFromURL()
 	}
 
 	return nil
 }
 
-func (dm *DownloadManager) downloadChunk(start int64, end int64, partNum int, wg *sync.WaitGroup) {
+func (download *Download) downloadChunk(start int64, end int64, partNum int, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	req, err := http.NewRequestWithContext(dm.Ctx, "GET", dm.URL, nil)
+	req, err := http.NewRequestWithContext(download.Manager.Ctx, "GET", download.URL, nil)
 	if err != nil {
 		fmt.Println("Error while creating request:", err)
 		return
@@ -133,7 +125,7 @@ func (dm *DownloadManager) downloadChunk(start int64, end int64, partNum int, wg
 	// response body must be closed at the end
 	defer resp.Body.Close()
 
-	file, err := os.Create(fmt.Sprintf("%s.part%d", dm.FileName, partNum))
+	file, err := os.Create(fmt.Sprintf("%s.part%d", download.FileName, partNum))
 	if err != nil {
 		fmt.Println("Error creating file part:", err)
 		return
@@ -149,20 +141,20 @@ func (dm *DownloadManager) downloadChunk(start int64, end int64, partNum int, wg
 	buf := make([]byte, 1024)
 	for {
 		// When we pause download, we should stop goroutines sequentially by lock/unlock
-		dm.Mutex.Lock()
-		for dm.Paused {
-			dm.Mutex.Unlock()
+		download.Manager.Mutex.Lock()
+		for download.Paused {
+			download.Manager.Mutex.Unlock()
 			//fmt.Printf("Goroutine %d paused...\n", partNum)
 			select {
-			case <-dm.Ctx.Done():
+			case <-download.Manager.Ctx.Done():
 				fmt.Println("Download cancelled.")
 				return
 			default:
 				time.Sleep(500 * time.Millisecond)
 			}
-			dm.Mutex.Lock()
+			download.Manager.Mutex.Lock()
 		}
-		dm.Mutex.Unlock()
+		download.Manager.Mutex.Unlock()
 
 		/* try to get at most len(buf) bytes data from server
 		n is the actual number of bytes read (could be lower than len(buf))
@@ -184,56 +176,56 @@ func (dm *DownloadManager) downloadChunk(start int64, end int64, partNum int, wg
 			return
 		}
 
-		dm.Mutex.Lock()
-		dm.DownloadedBytes += int64(n)
-		dm.Mutex.Unlock()
+		download.Manager.Mutex.Lock()
+		download.DownloadedBytes += int64(n)
+		download.Manager.Mutex.Unlock()
 
-		dm.ShowProgress()
+		download.ShowProgress()
 	}
 
 	fmt.Printf("Downloaded [%d-%d] bytes by goroutine %d\n", start, end, partNum)
 }
 
-func (dm *DownloadManager) StartDownload(download Download) error {
+func (download *Download) StartDownload() error {
 	fmt.Println("Download started...")
 
 	// Just for error handling at first, and filling dm.FileSize at the end
-	err := dm.GetFileSizeAndName()
+	err := download.GetFileSizeAndName()
 	if err != nil {
 		return err
 	}
 
 	var wg sync.WaitGroup
 	// اینجا میخوایم بگیم هر وورکر از کجا تا کجا بخونه، انگلیسی نتانم ۴ صبح :))
-	for i := 0; i < dm.Workers; i++ {
-		start := int64(i) * dm.ChunkSize
-		end := start + dm.ChunkSize - 1
+	for i := 0; i < download.Manager.Workers; i++ {
+		start := int64(i) * download.Manager.ChunkSize
+		end := start + download.Manager.ChunkSize - 1
 		// handling last part
-		if end >= dm.FileSize {
-			end = dm.FileSize - 1
+		if end >= download.FileSize {
+			end = download.FileSize - 1
 		}
 
 		wg.Add(1)
-		go dm.downloadChunk(start, end, i, &wg)
+		go download.downloadChunk(start, end, i, &wg)
 	}
 
 	// باید تردا وایسن تا کار همشون تموم شه، بعد ریترن کنیم
 	wg.Wait()
 
-	return dm.mergeFiles()
+	return mergeFiles(download)
 }
 
-func (dm *DownloadManager) mergeFiles() error {
+func mergeFiles(download *Download) error {
 	fmt.Println("Merging downloaded chunks...")
 
-	outputFile, err := os.Create(dm.FileName)
+	outputFile, err := os.Create(download.FileName)
 	if err != nil {
 		return err
 	}
 	defer outputFile.Close()
 
-	for i := 0; i < dm.Workers; i++ {
-		partFileName := fmt.Sprintf("%s.part%d", dm.FileName, i)
+	for i := 0; i < download.Manager.Workers; i++ {
+		partFileName := fmt.Sprintf("%s.part%d", download.FileName, i)
 		partFile, err := os.Open(partFileName)
 		if err != nil {
 			return err
@@ -252,14 +244,14 @@ func (dm *DownloadManager) mergeFiles() error {
 	return nil
 }
 
-func (dm *DownloadManager) CancelDownload() {
-	dm.Cancel()
+func (download *Download) CancelDownload() {
+	download.Manager.Cancel()
 	fmt.Println("Download cancelled.")
 }
 
-func (dm *DownloadManager) changeDownloadStatus(download *Download) {
-	dm.Mutex.Lock()
-	defer dm.Mutex.Unlock()
+func (download *Download) changeDownloadStatus() {
+	download.Manager.Mutex.Lock()
+	defer download.Manager.Mutex.Unlock()
 
 	if download.Progress == 0 {
 		download.Status = Pending
@@ -278,7 +270,7 @@ func (dm *DownloadManager) deleteFromQueue(download *Download, queue *Queue) {
 	//TODO
 }
 
-func (dm *DownloadManager) retry(download *Download) {
+func (download *Download) retry() {
 	if download.Status != Failed {
 		fmt.Println("Retry not allowed, download isn't in failed status")
 		return
@@ -287,7 +279,7 @@ func (dm *DownloadManager) retry(download *Download) {
 	fmt.Printf("Retrying download: %s\n", download.FileName)
 	download.Status = InProgress
 
-	err := dm.StartDownload(*download)
+	err := download.StartDownload()
 	if err != nil {
 		fmt.Println("Retry failed:", err)
 		download.Status = Failed
@@ -298,11 +290,11 @@ func (dm *DownloadManager) retry(download *Download) {
 	fmt.Println("Retry successful:", download.FileName)
 }
 
-func (dm *DownloadManager) ShowProgress() {
-	dm.Mutex.Lock()
-	defer dm.Mutex.Unlock()
+func (download *Download) ShowProgress() {
+	download.Manager.Mutex.Lock()
+	defer download.Manager.Mutex.Unlock()
 
-	percentage := float64(dm.DownloadedBytes) / float64(dm.FileSize) * 100
+	percentage := float64(download.DownloadedBytes) / float64(download.FileSize) * 100
 	barLength := 30
 	filled := int(percentage / 100 * float64(barLength))
 	bar := strings.Repeat("█", filled) + strings.Repeat("-", barLength-filled)
