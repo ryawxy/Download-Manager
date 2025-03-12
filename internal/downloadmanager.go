@@ -14,15 +14,16 @@ import (
 )
 
 type DownloadManager struct {
-	URL       string `json:"url"`
-	FileName  string `json:"fileName"`
-	FileSize  int64  `json:"fileSize"`  // whole file
-	ChunkSize int64  `json:"chunkSize"` // size that each worker process
-	Workers   int
-	Cancel    context.CancelFunc
-	Ctx       context.Context
-	Mutex     sync.Mutex
-	Paused    bool `json:"paused"` // our goroutines must check this field...
+	URL             string `json:"url"`
+	FileName        string `json:"fileName"`
+	FileSize        int64  `json:"fileSize"`  // whole file
+	ChunkSize       int64  `json:"chunkSize"` // size that each worker process
+	Workers         int
+	Cancel          context.CancelFunc
+	Ctx             context.Context
+	Mutex           sync.Mutex
+	Paused          bool  `json:"paused"` // our goroutines must check this field...
+	DownloadedBytes int64 // a common variable among goroutines
 }
 
 var database DataBase
@@ -146,7 +147,6 @@ func (dm *DownloadManager) downloadChunk(start int64, end int64, partNum int, wg
 	}(file)
 
 	buf := make([]byte, 1024)
-
 	for {
 		// When we pause download, we should stop goroutines sequentially by lock/unlock
 		dm.Mutex.Lock()
@@ -183,9 +183,15 @@ func (dm *DownloadManager) downloadChunk(start int64, end int64, partNum int, wg
 			fmt.Println("Error writing file part:", err)
 			return
 		}
+
+		dm.Mutex.Lock()
+		dm.DownloadedBytes += int64(n)
+		dm.Mutex.Unlock()
+
+		dm.ShowProgress()
 	}
 
-	fmt.Printf("Downloaded [%d] [%d] bytes by goroutine %d\n", start, end, partNum)
+	fmt.Printf("Downloaded [%d-%d] bytes by goroutine %d\n", start, end, partNum)
 }
 
 func (dm *DownloadManager) StartDownload(download Download) error {
@@ -268,7 +274,7 @@ func (dm *DownloadManager) changeDownloadStatus(download *Download) {
 	fmt.Printf("Download status updated: %s -> %s\n", download.FileName, download.Status)
 }
 
-func (dm *DownloadManager) deleteFromQueue(download Download, queue *Queue) {
+func (dm *DownloadManager) deleteFromQueue(download *Download, queue *Queue) {
 	//TODO
 }
 
@@ -290,4 +296,16 @@ func (dm *DownloadManager) retry(download *Download) {
 
 	download.Status = Completed
 	fmt.Println("Retry successful:", download.FileName)
+}
+
+func (dm *DownloadManager) ShowProgress() {
+	dm.Mutex.Lock()
+	defer dm.Mutex.Unlock()
+
+	percentage := float64(dm.DownloadedBytes) / float64(dm.FileSize) * 100
+	barLength := 30
+	filled := int(percentage / 100 * float64(barLength))
+	bar := strings.Repeat("█", filled) + strings.Repeat("-", barLength-filled)
+
+	fmt.Printf("\rDownloading: [%s] %.2f%%", bar, percentage)
 }
