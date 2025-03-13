@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"IDM/internal"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -9,12 +10,14 @@ import (
 var (
 	selectedInputStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#18FFFF")).Bold(true)
 	unselectedInputStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	errorStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000")).Bold(true)
 )
 
 type NewDownloadTab struct {
 	url, queue, saveAs textinput.Model
 	cursor             int
 	isActive           bool
+	errorMsg           string
 }
 
 func NewNewDownloadTab() NewDownloadTab {
@@ -65,6 +68,15 @@ func (n NewDownloadTab) Init() tea.Cmd {
 	return nil
 }
 
+func (n NewDownloadTab) newDownload() {
+	//todo correct the number of workers
+	dm := internal.NewDownloadManager(n.url.Value(), n.saveAs.Value(), 5)
+	err := dm.StartDownload()
+	if err != nil {
+		n.errorMsg = err.Error()
+	}
+}
+
 func (n NewDownloadTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -85,7 +97,7 @@ func (n NewDownloadTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			n.isActive = false
 			n.cursor = -1
 		case "enter":
-			//todo call new_download function
+			n.newDownload()
 		}
 	}
 
@@ -128,8 +140,10 @@ func (n NewDownloadTab) View() string {
 		saveAsView = unselectedInputStyle.Render("Save as: " + saveAsView)
 	}
 
+	errMsg := errorStyle.Render(n.errorMsg)
+
 	return lipgloss.JoinVertical(lipgloss.Top,
-		urlView, queueView, saveAsView,
+		urlView, queueView, saveAsView, errMsg,
 	)
 }
 

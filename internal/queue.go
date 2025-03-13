@@ -121,7 +121,7 @@ func StartQueueDownloads(q *Queue) {
 			}
 
 			fmt.Printf("Downloading file: %s\n", dm.FileName)
-			if err := dm.StartDownload(*d); err != nil {
+			if err := dm.StartDownload(); err != nil {
 				fmt.Println("Error:", err)
 			}
 

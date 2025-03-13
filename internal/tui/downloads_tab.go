@@ -137,8 +137,8 @@ func (d DownloadsTab) RenderTable() string {
 						}
 					}
 					// Join the styled actions with a separator and render them inside square brackets.
-					actionStr := "[" + strings.Join(styledActions, " | ") + "]"
-					table += "   " + actionStr
+					actionStr := "[" + strings.Join(styledActions, "|") + "]"
+					table += " " + actionStr
 				}
 			}
 			table += "\n"

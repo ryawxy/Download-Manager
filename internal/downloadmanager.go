@@ -32,6 +32,10 @@ var database DataBase
 
 better to implement at future i guess, we can create multiple DM
 */
+
+// todo remove trash files after task completed
+// todo retest downloadFrom ocw.sharif.edu
+
 func NewDownloadManager(url string, fileName string, workers int) *DownloadManager {
 	ctx, cancel := context.WithCancel(context.Background())
 	d := &DownloadManager{
@@ -185,11 +189,11 @@ func (dm *DownloadManager) downloadChunk(start int64, end int64, partNum int, wg
 		}
 	}
 
-	fmt.Printf("Downloaded [%d] [%d] bytes by goroutine %d\n", start, end, partNum)
+	//fmt.Printf("Downloaded [%d] [%d] bytes by goroutine %d\n", start, end, partNum)
 }
 
-func (dm *DownloadManager) StartDownload(download Download) error {
-	fmt.Println("Download started...")
+func (dm *DownloadManager) StartDownload() error {
+	//fmt.Println("Download started...")
 
 	// Just for error handling at first, and filling dm.FileSize at the end
 	err := dm.GetFileSizeAndName()
@@ -218,7 +222,7 @@ func (dm *DownloadManager) StartDownload(download Download) error {
 }
 
 func (dm *DownloadManager) mergeFiles() error {
-	fmt.Println("Merging downloaded chunks...")
+	//fmt.Println("Merging downloaded chunks...")
 
 	outputFile, err := os.Create(dm.FileName)
 	if err != nil {
@@ -242,7 +246,7 @@ func (dm *DownloadManager) mergeFiles() error {
 		//os.Remove(partFileName)
 	}
 
-	fmt.Println("Download complete.")
+	//fmt.Println("Download complete.")
 	return nil
 }
 
