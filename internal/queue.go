@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 )
@@ -24,14 +25,16 @@ type Queue struct {
 	Paused                 bool         `json:"paused"`
 }
 
-func NewQueue(id, directory string, numberOfFilesLimit int, bandwidthLimit int, maxConcurrent int, startTime, endTime time.Time) *Queue {
+func NewQueue(id, directory string, numberOfFilesLimit int, bandwidthLimit int,
+	maxConcurrent int, startTime, endTime time.Time) *Queue {
+
 	rate := time.Second / time.Duration(bandwidthLimit)
 
 	q := &Queue{
 		Id:                     id,
 		Downloads:              make([]*Download, 0),
-		NumberOfFilesLimit:     numberOfFilesLimit,
 		Directory:              directory,
+		NumberOfFilesLimit:     numberOfFilesLimit,
 		BandwidthLimit:         bandwidthLimit,
 		MaxConcurrentDownloads: maxConcurrent,
 		StartTime:              startTime,
@@ -117,7 +120,7 @@ func StartQueueDownloads(q *Queue) {
 		wg.Add(1)
 		sem <- struct{}{}
 
-		go func(d *Download, dir string) {
+		go func(d *Download, dir string, tb *TokenBucket) {
 			defer wg.Done()
 
 			q.mutex.Lock()
@@ -129,9 +132,16 @@ func StartQueueDownloads(q *Queue) {
 			}
 			q.mutex.Unlock()
 
-			// TODO generalize number of threads at the end (instead of 4)
-			d.NewDownloadManager(4)
+			d.NewDownloadManager(4, tb)
 			d.Manager.Ctx = ctx
+
+			d.Directory = dir
+
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				fmt.Println("Error creating directory:", err)
+				<-sem
+				return
+			}
 
 			err := d.GetFileSizeAndName()
 			if err != nil {
@@ -146,7 +156,7 @@ func StartQueueDownloads(q *Queue) {
 			}
 
 			<-sem
-		}(d, q.Directory)
+		}(d, q.Directory, q.TokenBucket)
 	}
 
 	wg.Wait()

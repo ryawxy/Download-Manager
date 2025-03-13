@@ -15,11 +15,12 @@ import (
 )
 
 type DownloadManager struct {
-	ChunkSize int64 `json:"chunkSize"` // size that each worker process
-	Workers   int
-	Cancel    context.CancelFunc
-	Ctx       context.Context
-	Mutex     sync.Mutex
+	ChunkSize   int64 `json:"chunkSize"` // size that each worker process
+	Workers     int
+	Cancel      context.CancelFunc
+	Ctx         context.Context
+	Mutex       sync.Mutex
+	TokenBucket *TokenBucket
 }
 
 /*
@@ -27,14 +28,14 @@ type DownloadManager struct {
 
 better to implement at future I guess, we can create multiple DM
 */
-func (download *Download) NewDownloadManager(workers int) *DownloadManager {
+func (download *Download) NewDownloadManager(workers int, tb *TokenBucket) *DownloadManager {
 	ctx, cancel := context.WithCancel(context.Background())
 	download.Manager = &DownloadManager{
-		Workers: workers,
-		Cancel:  cancel,
-		Ctx:     ctx,
+		Workers:     workers,
+		Cancel:      cancel,
+		Ctx:         ctx,
+		TokenBucket: tb,
 	}
-
 	return download.Manager
 }
 
@@ -106,12 +107,11 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 
 	req, err := http.NewRequestWithContext(download.Manager.Ctx, "GET", download.URL, nil)
 	if err != nil {
-		fmt.Println("Error while creating request:", err)
+		fmt.Println("Error creating request:", err)
 		return
 	}
 
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
-
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		fmt.Println("Error during download:", err)
@@ -119,10 +119,11 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 	}
 	defer resp.Body.Close()
 
-	fullPath := filepath.Join(download.Directory, fmt.Sprintf("%s.part%d", download.FileName, partNum))
+	partFileName := fmt.Sprintf("%s.part%d", download.FileName, partNum)
+	fullPath := filepath.Join(download.Directory, partFileName)
 	file, err := os.Create(fullPath)
 	if err != nil {
-		fmt.Println("Error creating file part:", err)
+		fmt.Println("Error creating part file:", err)
 		return
 	}
 	defer file.Close()
@@ -134,7 +135,7 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 			download.Manager.Mutex.Unlock()
 			select {
 			case <-download.Manager.Ctx.Done():
-				fmt.Println("Download cancelled.")
+				fmt.Println("Download cancelled")
 				return
 			default:
 				time.Sleep(500 * time.Millisecond)
@@ -152,9 +153,14 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 			return
 		}
 
+		// Apply rate limiting
+		if download.Manager.TokenBucket != nil {
+			download.Manager.TokenBucket.WaitAndTake(n)
+		}
+
 		_, err = file.Write(buf[:n])
 		if err != nil {
-			fmt.Println("Error writing file part:", err)
+			fmt.Println("Error writing to part file:", err)
 			return
 		}
 
@@ -164,10 +170,7 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 
 		download.ShowProgress()
 	}
-
-	fmt.Printf("Downloaded [%d-%d] bytes by goroutine %d\n", start, end, partNum)
 }
-
 func (download *Download) StartDownload() error {
 	if err := os.MkdirAll(download.Directory, 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %v", err)
@@ -179,6 +182,7 @@ func (download *Download) StartDownload() error {
 	}
 
 	var wg sync.WaitGroup
+	fmt.Println(download.Manager.Workers, "*****************************")
 	for i := 0; i < download.Manager.Workers; i++ {
 		start := int64(i) * download.Manager.ChunkSize
 		end := start + download.Manager.ChunkSize - 1
@@ -188,6 +192,7 @@ func (download *Download) StartDownload() error {
 
 		wg.Add(1)
 		go download.downloadChunk(start, end, i, &wg)
+		fmt.Println(i)
 	}
 
 	wg.Wait()

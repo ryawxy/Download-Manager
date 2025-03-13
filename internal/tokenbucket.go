@@ -6,42 +6,54 @@ import (
 )
 
 type TokenBucket struct {
-	Capacity   int
-	Rate       time.Duration
-	Tokens     int
-	LastRefill time.Time
+	capacity   int
+	rate       time.Duration
+	tokens     int
+	lastRefill time.Time
 	mu         sync.Mutex
 }
 
 func NewTokenBucket(capacity int, rate time.Duration) *TokenBucket {
 	return &TokenBucket{
-		Capacity:   capacity,
-		Rate:       rate,
-		Tokens:     capacity,
-		LastRefill: time.Now(),
+		capacity:   capacity,
+		rate:       rate,
+		tokens:     capacity,
+		lastRefill: time.Now(),
 	}
 }
 
 func (tb *TokenBucket) refill() {
 	now := time.Now()
-	elapsed := now.Sub(tb.LastRefill)
-	tokensToAdd := int(elapsed / tb.Rate)
+	elapsed := now.Sub(tb.lastRefill)
+	tokensToAdd := int(float64(elapsed) / float64(tb.rate))
 
 	if tokensToAdd > 0 {
-		tb.Tokens = min(tb.Tokens+tokensToAdd, tb.Capacity)
-		tb.LastRefill = now
+		tb.tokens = min(tb.tokens+tokensToAdd, tb.capacity)
+		tb.lastRefill = now
 	}
 }
 
-func (tb *TokenBucket) Take(tokens int) bool {
+func (tb *TokenBucket) WaitAndTake(tokens int) {
 	tb.mu.Lock()
 	defer tb.mu.Unlock()
 
-	tb.refill()
+	for tb.tokens < tokens {
+		// Calculate how long to wait for the needed tokens
+		needed := tokens - tb.tokens
+		waitTime := time.Duration(needed) * tb.rate
 
-	if tb.Tokens >= tokens {
-		tb.Tokens -= tokens
-		return true
+		tb.mu.Unlock()
+		time.Sleep(waitTime)
+		tb.mu.Lock()
+		tb.refill()
 	}
-	return false
+
+	tb.tokens -= tokens
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
