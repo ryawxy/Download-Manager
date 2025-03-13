@@ -21,3 +21,5 @@ type Download struct {
 	TotalBytes int64  `json:"total_bytes"`
 	StartTime  time.Time
 }
+
+var DownloadList []*Download

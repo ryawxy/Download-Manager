@@ -171,3 +171,5 @@ func DeleteQueue(queueName string) {
 		fmt.Println("Queue not found!")
 	}
 }
+
+var QueuesList = make(map[string]*Queue)

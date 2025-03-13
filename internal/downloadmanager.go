@@ -25,8 +25,6 @@ type DownloadManager struct {
 	Paused    bool `json:"paused"` // our goroutines must check this field...
 }
 
-var database DataBase
-
 /*
 	NewDownloadManager is just a simple constructor, dont worry :)
 
