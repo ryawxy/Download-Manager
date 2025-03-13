@@ -157,11 +157,16 @@ func (q QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				q.queueCursor = -1
 			}
 		}
+	case tickMsg:
+		q.queues = make([]internal.Queue, 0)
+		for _, queue := range internal.QueuesList {
+			q.queues = append(q.queues, *queue)
+		}
+		return q, tickCmd()
 	}
-
 	var cmd tea.Cmd
 	if q.controlContent && q.contentCursor < len(q.inputs) {
-		q.inputs[q.contentCursor], cmd = q.inputs[q.contentCursor].Update(msg)
+		q.inputs[q.contentCursor], _ = q.inputs[q.contentCursor].Update(msg)
 		q.updateCurrentQueue()
 	}
 

@@ -200,6 +200,14 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			d.showOptions = !d.showOptions
 		}
+	case tickMsg:
+		d.downloads = make([]internal.Download, 0)
+		for _, queue := range internal.QueuesList {
+			for _, download := range queue.Downloads {
+				d.downloads = append(d.downloads, *download)
+			}
+		}
+		return d, tickCmd()
 	}
 	if d.cursor < d.pageStart {
 		d.pageStart = d.cursor

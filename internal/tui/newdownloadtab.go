@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"IDM/internal"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -69,12 +68,7 @@ func (n NewDownloadTab) Init() tea.Cmd {
 }
 
 func (n NewDownloadTab) newDownload() {
-	//todo correct the number of workers
-	dm := internal.NewDownloadManager(n.url.Value(), n.saveAs.Value(), 5)
-	err := dm.StartDownload()
-	if err != nil {
-		n.errorMsg = err.Error()
-	}
+
 }
 
 func (n NewDownloadTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

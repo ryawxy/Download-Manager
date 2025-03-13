@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 )
@@ -21,16 +22,21 @@ type Queue struct {
 	TokenBucket            *TokenBucket `json:"-"`
 	mutex                  sync.Mutex   `json:"-"`
 	CancelFunc             func()       `json:"-"`
+	Paused                 bool         `json:"paused"`
 }
 
-func NewQueue(id, directory string, numberOfFilesLimit int, bandwidthLimit int, maxConcurrent int, startTime, endTime time.Time) *Queue {
+var QueuesList = make(map[string]*Queue)
+
+func NewQueue(id, directory string, numberOfFilesLimit int, bandwidthLimit int,
+	maxConcurrent int, startTime, endTime time.Time) *Queue {
+
 	rate := time.Second / time.Duration(bandwidthLimit)
 
 	q := &Queue{
 		Id:                     id,
 		Downloads:              make([]*Download, 0),
-		NumberOfFilesLimit:     numberOfFilesLimit,
 		Directory:              directory,
+		NumberOfFilesLimit:     numberOfFilesLimit,
 		BandwidthLimit:         bandwidthLimit,
 		MaxConcurrentDownloads: maxConcurrent,
 		StartTime:              startTime,
@@ -92,9 +98,17 @@ func (q *Queue) RemoveDownload(name string) error {
 	}
 	return errors.New("download not found")
 }
-func StartQueueDownloads(q *Queue) {
-	fmt.Println("Starting downloads in queue:", q.Id)
 
+func StartQueueDownloads(q *Queue) {
+	q.mutex.Lock()
+	if q.Paused {
+		fmt.Printf("Queue %s is paused. Downloads won't start", q.Id)
+		q.mutex.Unlock()
+		return
+	}
+	q.mutex.Unlock()
+
+	fmt.Println("Starting downloads in queue:", q.Id)
 	sem := make(chan struct{}, q.MaxConcurrentDownloads)
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
@@ -108,30 +122,80 @@ func StartQueueDownloads(q *Queue) {
 		wg.Add(1)
 		sem <- struct{}{}
 
-		go func(d *Download) {
+		go func(d *Download, dir string, tb *TokenBucket) {
 			defer wg.Done()
-			dm := NewDownloadManager(d.URL, d.FileName, 4)
-			dm.Ctx = ctx
 
-			err := dm.GetFileSizeAndName()
+			q.mutex.Lock()
+			if q.Paused {
+				fmt.Println("Queue is paused, stopping download:", d.FileName)
+				q.mutex.Unlock()
+				<-sem
+				return
+			}
+			q.mutex.Unlock()
+
+			d.NewDownloadManager(4, tb)
+			d.Manager.Ctx = ctx
+
+			d.Directory = dir
+
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				fmt.Println("Error creating directory:", err)
+				<-sem
+				return
+			}
+
+			err := d.GetFileSizeAndName()
 			if err != nil {
 				fmt.Println("Error getting file info for", d.URL)
 				<-sem
 				return
 			}
 
-			fmt.Printf("Downloading file: %s\n", dm.FileName)
-			if err := dm.StartDownload(); err != nil {
+			fmt.Printf("Downloading file: %s\n", d.FileName)
+			if err := d.StartDownload(); err != nil {
 				fmt.Println("Error:", err)
 			}
 
 			<-sem
-		}(d)
+		}(d, q.Directory, q.TokenBucket)
 	}
 
 	wg.Wait()
 	fmt.Println("All downloads completed in queue:", q.Id)
 }
+
+func (q *Queue) PauseQueue() {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	if q.Paused {
+		fmt.Println("Queue is already paused")
+		return
+	}
+
+	q.Paused = true
+	if q.CancelFunc != nil {
+		q.CancelFunc() // it will cancel all ongoing downloads
+	}
+
+	fmt.Printf("Queue %s paused successfully\n", q.Id)
+}
+
+func (q *Queue) ResumeQueue() {
+	q.mutex.Lock()
+	defer q.mutex.Unlock()
+
+	if !q.Paused {
+		fmt.Println("Queue is already running")
+		return
+	}
+
+	q.Paused = false
+	fmt.Printf("Queue %s resumed successfully\n", q.Id)
+	go StartQueueDownloads(q) // starting again
+}
+
 func ScheduleQueueDownloads(q *Queue) {
 	now := time.Now()
 	delay := q.StartTime.Sub(now)
@@ -171,5 +235,3 @@ func DeleteQueue(queueName string) {
 		fmt.Println("Queue not found!")
 	}
 }
-
-var QueuesList = make(map[string]*Queue)

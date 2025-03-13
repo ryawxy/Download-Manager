@@ -24,6 +24,10 @@ type MainStage struct {
 	height, width int
 }
 
+const newDownloadTabId = 0
+const queuesTabId = 2
+const downloadsTabId = 1
+
 func NewMainStage() MainStage {
 	return MainStage{
 		height:     20,
@@ -43,11 +47,18 @@ func Start() {
 
 type tickMsg time.Time
 
+func tickCmd() tea.Cmd {
+	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
+}
+
 func (m MainStage) Init() tea.Cmd {
-	ticker := time.NewTicker(500 * time.Millisecond)
-	return func() tea.Msg {
-		return tickMsg(<-ticker.C)
+	for i, tab := range m.tabs {
+		n, _ := tab.Update(tickMsg(time.Now()))
+		m.tabs[i] = n.(Tab)
 	}
+	return tickCmd()
 }
 
 func (m MainStage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -56,7 +67,6 @@ func (m MainStage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
-
 	case tea.WindowSizeMsg: // Handles terminal resizing
 		m.height = msg.Height // Update stored height dynamically
 		m.width = msg.Width   // Update stored width dynamically
@@ -80,7 +90,7 @@ func (m MainStage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	return m, nil
+	return m, tickCmd()
 }
 
 var (
