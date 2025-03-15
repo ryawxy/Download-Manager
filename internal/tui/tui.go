@@ -67,6 +67,11 @@ func (m MainStage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
+	case exitQueuesMsg:
+		// Deactivate the current tab so that tabs menu is shown.
+		m.tabs[m.currentTab] = m.tabs[m.currentTab].setActive(false)
+		return m, nil
+
 	case tea.WindowSizeMsg: // Handles terminal resizing
 		m.height = msg.Height // Update stored height dynamically
 		m.width = msg.Width   // Update stored width dynamically

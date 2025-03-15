@@ -1,15 +1,19 @@
 package tui
 
 import (
+	"IDM/internal"
+	"fmt"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"strings"
 )
 
 var (
 	selectedInputStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#18FFFF")).Bold(true)
 	unselectedInputStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	errorStyle           = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000")).Bold(true)
+	successStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("#00FF00")).Bold(true)
 )
 
 type NewDownloadTab struct {
@@ -17,25 +21,29 @@ type NewDownloadTab struct {
 	cursor             int
 	isActive           bool
 	errorMsg           string
+	successMsg         string
 }
 
 func NewNewDownloadTab() NewDownloadTab {
 	n := NewDownloadTab{}
 	n.url = textinput.New()
-	n.url.Placeholder = ""
+	n.url.Placeholder = "Enter URL"
 	n.url.Prompt = ""
 	n.url.Focus()
 
 	n.queue = textinput.New()
-	n.queue.Placeholder = ""
+	n.queue.Placeholder = "Enter Queue Name"
 	n.queue.Prompt = ""
 
 	n.saveAs = textinput.New()
-	n.saveAs.Placeholder = ""
+	n.saveAs.Placeholder = "Enter Filename"
 	n.saveAs.Prompt = ""
 
 	n.cursor = -1
 	n.isActive = false
+	n.errorMsg = ""
+	n.successMsg = ""
+
 	return n
 }
 
@@ -55,20 +63,79 @@ func (n NewDownloadTab) isActivated() bool {
 
 func (n NewDownloadTab) Init() tea.Cmd {
 	n.url = textinput.New()
-	n.url.Placeholder = ""
+	n.url.Placeholder = "Enter URL"
 
 	n.queue = textinput.New()
-	n.queue.Placeholder = ""
+	n.queue.Placeholder = "Enter Queue Name"
 
 	n.saveAs = textinput.New()
-	n.saveAs.Placeholder = ""
+	n.saveAs.Placeholder = "Enter Filename"
 
 	n.cursor = -1
+	n.errorMsg = ""
+	n.successMsg = ""
+
 	return nil
 }
 
-func (n NewDownloadTab) newDownload() {
+func (n *NewDownloadTab) newDownload() {
+	url := strings.TrimSpace(n.url.Value())
+	queueName := strings.TrimSpace(n.queue.Value())
+	saveAs := strings.TrimSpace(n.saveAs.Value())
 
+	if url == "" || queueName == "" {
+		n.errorMsg = "All fields must be filled!"
+		n.successMsg = ""
+		return
+	}
+
+	var selectedQueue *internal.Queue
+	for _, q := range internal.QueuesList {
+		if q.Id == queueName {
+			selectedQueue = q
+			break
+		}
+	}
+
+	if selectedQueue == nil {
+		n.errorMsg = fmt.Sprintf("Queue '%s' not found!", queueName)
+		n.successMsg = ""
+		return
+	}
+	if saveAs == "" {
+		saveAs = selectedQueue.Directory
+	}
+	newDownload := internal.Download{
+		URL:       url,
+		Directory: saveAs,
+		QueueName: queueName,
+		Status:    "Pending",
+	}
+	newDownload.NewDownloadManager(4, selectedQueue.TokenBucket)
+	err := newDownload.GetFileSizeAndName()
+	if err != nil {
+		n.errorMsg = "Invalid URL or unreachable resource"
+		return
+	}
+
+	err = selectedQueue.AddDownload(&newDownload)
+	if err != nil {
+		n.errorMsg = "Failed to add to queue"
+		return
+	}
+	internal.DownloadsList = append(internal.DownloadsList, &newDownload)
+
+	fmt.Println(len(selectedQueue.Downloads))
+
+	n.successMsg = fmt.Sprintf("Added '%s' to queue '%s'", newDownload.FileName, queueName)
+	n.errorMsg = ""
+
+	n.url.SetValue("")
+	n.queue.SetValue("")
+	n.saveAs.SetValue("")
+	n.cursor = 0
+	n.successMsg = ""
+	n.errorMsg = ""
 }
 
 func (n NewDownloadTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -135,9 +202,10 @@ func (n NewDownloadTab) View() string {
 	}
 
 	errMsg := errorStyle.Render(n.errorMsg)
+	successMsg := successStyle.Render(n.successMsg)
 
 	return lipgloss.JoinVertical(lipgloss.Top,
-		urlView, queueView, saveAsView, errMsg,
+		urlView, queueView, saveAsView, errMsg, successMsg,
 	)
 }
 
@@ -146,5 +214,5 @@ func (n NewDownloadTab) toString() string {
 }
 
 func (n NewDownloadTab) getFooter() string {
-	return "Use '↑ / ↓' to navigate, " + "Press Enter to start download"
+	return "Use '↑ / ↓' to navigate, Press Enter to add download"
 }

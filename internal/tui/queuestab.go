@@ -3,22 +3,26 @@ package tui
 import (
 	"IDM/internal"
 	"fmt"
+	"sort"
+	"strconv"
+	"time"
+
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"strconv"
-	"time"
 )
 
-//if you were in the mood, cleanup controls
-// QueuesTab todo implement newQueue button
+type exitQueuesMsg struct{}
 
 type QueuesTab struct {
-	queues                                    []internal.Queue
-	queueCursor, contentCursor, buttonsCursor int
-	isActive                                  bool
-	controlContent                            bool
-	inputs                                    []textinput.Model
+	queues           []internal.Queue
+	queueCursor      int
+	contentCursor    int
+	buttonsCursor    int
+	isActive         bool
+	controlContent   bool
+	creatingNewQueue bool
+	inputs           []textinput.Model
 }
 
 func temporaryRandomQueues() []internal.Queue {
@@ -29,39 +33,28 @@ func temporaryRandomQueues() []internal.Queue {
 	}
 }
 
-func getNewQueue() internal.Queue {
-	return internal.Queue{
-		Id:                 "newQueue",
-		Directory:          "Downloads",
-		NumberOfFilesLimit: -1,
-		BandwidthLimit:     -1,
-		NumberOfTriesLimit: -1,
-		StartTime:          time.Now(),
-		EndTime:            time.Now(),
-	}
-}
-
-func NewQueuesTab() QueuesTab {
+func NewQueuesTab() *QueuesTab {
 	queues := temporaryRandomQueues()
-	queues = append(queues, getNewQueue())
-	inputs := make([]textinput.Model, 6)
+	inputs := make([]textinput.Model, 7)
 	for i := range inputs {
 		inputs[i] = textinput.New()
 		inputs[i].Placeholder = ""
 		inputs[i].Prompt = ""
 	}
-	return QueuesTab{
-		queues:         queues,
-		buttonsCursor:  -1,
-		queueCursor:    -1,
-		contentCursor:  -1,
-		controlContent: false,
-		inputs:         inputs,
+	tab := &QueuesTab{
+		queues:           queues,
+		buttonsCursor:    -1,
+		queueCursor:      0,
+		contentCursor:    0,
+		controlContent:   false,
+		creatingNewQueue: false,
+		inputs:           inputs,
 	}
+	tab.setInputs()
+	return tab
 }
 
-func (q QueuesTab) updateCurrentQueue() {
-	//todo we probably need to call backend here!!!
+func (q *QueuesTab) updateCurrentQueue() {
 	q.queues[q.queueCursor].Directory = q.inputs[0].Value()
 	q.queues[q.queueCursor].NumberOfFilesLimit, _ = strconv.Atoi(q.inputs[1].Value())
 	q.queues[q.queueCursor].BandwidthLimit, _ = strconv.Atoi(q.inputs[2].Value())
@@ -70,7 +63,7 @@ func (q QueuesTab) updateCurrentQueue() {
 	q.queues[q.queueCursor].EndTime, _ = time.Parse("2006-01-02 15:04:05", q.inputs[5].Value())
 }
 
-func (q QueuesTab) setInputs() {
+func (q *QueuesTab) setInputs() {
 	q.inputs[0].SetValue(q.queues[q.queueCursor].Directory)
 	q.inputs[0].CursorEnd()
 	q.inputs[1].SetValue(strconv.Itoa(q.queues[q.queueCursor].NumberOfFilesLimit))
@@ -85,92 +78,153 @@ func (q QueuesTab) setInputs() {
 	q.inputs[5].CursorEnd()
 }
 
-func (q QueuesTab) setActive(b bool) Tab {
+func (q *QueuesTab) setActive(b bool) Tab {
 	q.isActive = b
 	if b {
 		q.queueCursor = 0
+		q.setInputs()
 	} else {
 		q.queueCursor = -1
 	}
 	return q
 }
 
-func (q QueuesTab) isActivated() bool {
+func (q *QueuesTab) isActivated() bool {
 	return q.isActive
 }
 
-func (q QueuesTab) toString() string {
+func (q *QueuesTab) toString() string {
 	return "Queues"
 }
 
-func (q QueuesTab) Init() tea.Cmd {
+func (q *QueuesTab) Init() tea.Cmd {
 	return nil
 }
 
-func (q QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.String() {
-		case "up":
-			if !q.controlContent {
-				q.queueCursor = (q.queueCursor + len(q.queues) - 1) % len(q.queues)
-				q.setInputs()
-			} else {
-				if q.contentCursor == len(q.inputs) {
-					q.buttonsCursor = -1
+		if !q.creatingNewQueue {
+			switch msg.String() {
+			case "up":
+				if !q.controlContent {
+					q.queueCursor = (q.queueCursor + len(q.queues) - 1) % len(q.queues)
+					q.setInputs()
+				} else if q.contentCursor > 0 {
+					q.contentCursor--
 				}
-				q.contentCursor = (q.contentCursor + len(q.inputs)) % (len(q.inputs) + 1)
-				if q.contentCursor == len(q.inputs) {
-					q.buttonsCursor = 0
+			case "down":
+				if !q.controlContent {
+					q.queueCursor = (q.queueCursor + 1) % len(q.queues)
+					q.setInputs()
+				} else if q.contentCursor < len(q.inputs)-1 {
+					q.contentCursor++
 				}
-			}
-		case "down":
-			if !q.controlContent {
-				q.queueCursor = (q.queueCursor + 1) % len(q.queues)
-				q.setInputs()
-			} else {
-				if q.contentCursor == len(q.inputs) {
-					q.buttonsCursor = -1
-				}
-				q.contentCursor = (q.contentCursor + 1) % (len(q.inputs) + 1)
-				if q.contentCursor == len(q.inputs) {
-					q.buttonsCursor = 0
-				}
-			}
-		case "right":
-			if q.contentCursor == len(q.inputs) {
-				q.buttonsCursor = (q.buttonsCursor + 1) % 3
-			} else {
+			case "right":
+				// Enter field editing mode.
 				q.controlContent = true
-				q.contentCursor = 0
-			}
-		case "left":
-			if q.controlContent {
-				if q.contentCursor == len(q.inputs) {
-					q.buttonsCursor = (q.buttonsCursor + 2) % 3
-				} else {
+			case "left":
+				if q.controlContent {
+					// Exit field editing mode.
 					q.controlContent = false
 					q.contentCursor = -1
+				} else {
+					// Not editing fields: exit to tabs menu.
+					return q, func() tea.Msg { return exitQueuesMsg{} }
 				}
-			} else {
-				q.isActive = false
-				q.queueCursor = -1
+			case "n":
+				q.creatingNewQueue = true
+				for i := range q.inputs {
+					q.inputs[i].SetValue("")
+				}
+				q.contentCursor = 0
+				q.buttonsCursor = -1
+			case "enter":
+				if q.controlContent {
+					q.inputs[q.contentCursor], _ = q.inputs[q.contentCursor].Update(msg)
+					q.updateCurrentQueue()
+				}
+			default:
+				if q.controlContent && q.contentCursor < len(q.inputs) {
+					q.inputs[q.contentCursor], _ = q.inputs[q.contentCursor].Update(msg)
+					q.updateCurrentQueue()
+				}
+			}
+		} else {
+			switch msg.String() {
+			case "up":
+				if q.contentCursor > 0 {
+					q.contentCursor--
+				}
+			case "down":
+				if q.contentCursor < len(q.inputs)-1 {
+					q.contentCursor++
+				}
+			case "right":
+				if q.contentCursor == len(q.inputs)-1 {
+					q.buttonsCursor = 0
+				}
+			case "left":
+				q.creatingNewQueue = false
+			case "enter":
+				if q.buttonsCursor != -1 {
+					if q.buttonsCursor%2 == 0 {
+						id := q.inputs[0].Value()
+						directory := q.inputs[1].Value()
+						retries, _ := strconv.Atoi(q.inputs[2].Value())
+						bwLimit, _ := strconv.Atoi(q.inputs[3].Value())
+						maxconcurrent, _ := strconv.Atoi(q.inputs[4].Value())
+						startTime, _ := time.Parse("15:04", q.inputs[5].Value())
+						endTime, _ := time.Parse("15:04", q.inputs[6].Value())
+
+						newQueue := internal.NewQueue(
+							id,
+							directory,
+							retries,
+							bwLimit,
+							maxconcurrent,
+							startTime,
+							endTime,
+						)
+						newQueue.NumberOfTriesLimit = retries
+						newQueue.BandwidthLimit = bwLimit
+						newQueue.MaxConcurrentDownloads = maxconcurrent
+						q.queues = append(q.queues, *newQueue)
+						q.creatingNewQueue = false
+						q.controlContent = false
+						q.queueCursor = len(q.queues) - 1
+						q.setInputs()
+					} else {
+						q.creatingNewQueue = false
+					}
+					return q, nil
+				} else {
+					q.inputs[q.contentCursor], _ = q.inputs[q.contentCursor].Update(msg)
+				}
+			default:
+				if q.buttonsCursor == -1 && q.contentCursor < len(q.inputs) {
+					q.inputs[q.contentCursor], _ = q.inputs[q.contentCursor].Update(msg)
+				}
 			}
 		}
 	case tickMsg:
-		q.queues = make([]internal.Queue, 0)
+		var sortedQueues []internal.Queue
 		for _, queue := range internal.QueuesList {
-			q.queues = append(q.queues, *queue)
+			sortedQueues = append(sortedQueues, *queue)
+		}
+		sort.Slice(sortedQueues, func(i, j int) bool {
+			return sortedQueues[i].Id < sortedQueues[j].Id
+		})
+		q.queues = sortedQueues
+		if !q.creatingNewQueue && len(q.queues) > 0 {
+			if q.queueCursor >= len(q.queues) {
+				q.queueCursor = 0
+			}
+			q.setInputs()
 		}
 		return q, tickCmd()
 	}
-	var cmd tea.Cmd
-	if q.controlContent && q.contentCursor < len(q.inputs) {
-		q.inputs[q.contentCursor], _ = q.inputs[q.contentCursor].Update(msg)
-		q.updateCurrentQueue()
-	}
-
-	return q, cmd
+	return q, nil
 }
 
 var (
@@ -179,8 +233,29 @@ var (
 	selectedStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#18FFFF")).Bold(true)
 )
 
-func (q QueuesTab) View() string {
-
+func (q *QueuesTab) View() string {
+	if q.creatingNewQueue {
+		// Render creation form.
+		form := ""
+		labels := []string{"Name", "Directory", "Retries Limit", "Bandwidth Limit", "Max Concurrent Files Limit", "Start Time", "End Time"}
+		for i, label := range labels {
+			if q.contentCursor == i && q.buttonsCursor == -1 {
+				form += selectedStyle.Render(label+": "+q.inputs[i].View()) + "\n"
+				q.inputs[i].Focus()
+			} else {
+				form += style.Render(label+": "+q.inputs[i].View()) + "\n"
+			}
+		}
+		buttons := []string{"Create", "Cancel"}
+		for i, button := range buttons {
+			if q.buttonsCursor != -1 && q.buttonsCursor%len(buttons) == i {
+				form += selectedStyle.Render("["+button+"]") + "  "
+			} else {
+				form += style.Render("["+button+"]") + "  "
+			}
+		}
+		return form + "\n" + "Press ← to go back to the queue list."
+	}
 	var queueList, queueContent string
 	for i, queue := range q.queues {
 		if q.queueCursor == i {
@@ -189,30 +264,19 @@ func (q QueuesTab) View() string {
 			queueList += style.Render(fmt.Sprintf("%8s |", queue.Id)) + "\n"
 		}
 	}
-
-	for i, label := range []string{"Default Download Path", "Number of Files Limit", "Bandwidth Limit", "Number of Retries Limit", "Start Time", "Finish Time"} {
-		if q.contentCursor == i {
+	labels := []string{"Directory", "Retries Limit", "Bandwidth Limit", "Max Concurrent Files Limit", "Start Time", "End Time"}
+	for i, label := range labels {
+		if q.controlContent && q.contentCursor == i {
 			queueContent += selectedStyle.Render(label+": "+q.inputs[i].View()) + "\n"
 			q.inputs[i].Focus()
 		} else {
 			queueContent += style.Render(label+": "+q.inputs[i].View()) + "\n"
 		}
 	}
-	buttons := []string{"Start All", "Pause All", "Delete"}
-	if q.queueCursor == len(q.queues)-1 {
-		buttons = []string{"Create"}
-	}
-	for i, button := range buttons {
-		if q.buttonsCursor != -1 && q.buttonsCursor%len(buttons) == i {
-			queueContent += selectedStyle.Render("["+button+"]") + "  "
-		} else {
-			queueContent += style.Render("["+button+"]") + "  "
-		}
-	}
-
-	return lipgloss.JoinHorizontal(lipgloss.Top, queueList, "   ", queueContent)
+	footer := "Press 'n' for New Queue | '→' to edit fields | '←' to go back | '↑/↓' to navigate"
+	return lipgloss.JoinHorizontal(lipgloss.Top, queueList, "   ", queueContent) + "\n" + footer
 }
 
-func (q QueuesTab) getFooter() string {
+func (q *QueuesTab) getFooter() string {
 	return "Press '→' to select, '←' to go back, '↑ / ↓' to navigate"
 }

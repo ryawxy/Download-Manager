@@ -30,6 +30,11 @@ func SaveQueuesToFile() error {
 	return nil
 }
 func LoadQueuesFromFile() error {
+	q := &Queue{
+		Id:             "Default",
+		BandwidthLimit: 1000000,
+	}
+	QueuesList["Default"] = q
 	storageMutex.Lock()
 	defer storageMutex.Unlock()
 
@@ -37,9 +42,8 @@ func LoadQueuesFromFile() error {
 	if err != nil {
 		if os.IsNotExist(err) {
 			fmt.Println("No existing queue file found. Starting fresh.")
-			return nil
+
 		}
-		return err
 	}
 
 	err = json.Unmarshal(data, &QueuesList)

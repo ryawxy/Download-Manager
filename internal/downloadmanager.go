@@ -98,6 +98,7 @@ func (download *Download) GetFileSizeAndName() error {
 	} else {
 		download.FileName = download.getFileNameFromURL()
 	}
+	SaveQueuesToFile()
 
 	return nil
 }
@@ -182,7 +183,6 @@ func (download *Download) StartDownload() error {
 	}
 
 	var wg sync.WaitGroup
-	fmt.Println(download.Manager.Workers, "*****************************")
 	for i := 0; i < download.Manager.Workers; i++ {
 		start := int64(i) * download.Manager.ChunkSize
 		end := start + download.Manager.ChunkSize - 1
@@ -192,7 +192,6 @@ func (download *Download) StartDownload() error {
 
 		wg.Add(1)
 		go download.downloadChunk(start, end, i, &wg)
-		fmt.Println(i)
 	}
 
 	wg.Wait()
@@ -269,6 +268,25 @@ func (download *Download) retry() {
 
 	download.Status = Completed
 	fmt.Println("Retry successful:", download.FileName)
+}
+
+func (download *Download) PauseDownload() {
+	download.Manager.Mutex.Lock()
+	defer download.Manager.Mutex.Unlock()
+	download.Paused = true
+	download.Status = Paused
+	fmt.Printf("Paused download: %s\n", download.FileName)
+}
+
+// ResumeDownload resumes a paused download.
+func (download *Download) ResumeDownload() {
+	download.Manager.Mutex.Lock()
+	defer download.Manager.Mutex.Unlock()
+	download.Paused = false
+	download.Status = InProgress
+	// For simplicity, re-start the download. In a real app, resume logic would be more complex.
+	go download.StartDownload()
+	fmt.Printf("Resumed download: %s\n", download.FileName)
 }
 
 func (download *Download) ShowProgress() {

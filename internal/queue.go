@@ -27,7 +27,7 @@ type Queue struct {
 
 var QueuesList = make(map[string]*Queue)
 
-func NewQueue(id, directory string, numberOfFilesLimit int, bandwidthLimit int,
+func NewQueue(id, directory string, retriesLimit int, bandwidthLimit int,
 	maxConcurrent int, startTime, endTime time.Time) *Queue {
 
 	rate := time.Second / time.Duration(bandwidthLimit)
@@ -36,7 +36,7 @@ func NewQueue(id, directory string, numberOfFilesLimit int, bandwidthLimit int,
 		Id:                     id,
 		Downloads:              make([]*Download, 0),
 		Directory:              directory,
-		NumberOfFilesLimit:     numberOfFilesLimit,
+		NumberOfTriesLimit:     retriesLimit,
 		BandwidthLimit:         bandwidthLimit,
 		MaxConcurrentDownloads: maxConcurrent,
 		StartTime:              startTime,
@@ -75,13 +75,16 @@ func (q *Queue) EditQueue(maxConcurrent int, startTime, endTime time.Time, bandw
 func (q *Queue) AddDownload(d *Download) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
-	for _, queue := range QueuesList {
-		if queue.Id == q.Id {
-			d.Status = Pending
-			q.Downloads = append(q.Downloads, d)
-			_ = SaveQueuesToFile()
-		}
-	}
+	q.Downloads = append(q.Downloads, d)
+	SaveQueuesToFile()
+
+	//for _, queue := range QueuesList {
+	//	if queue.Id == q.Id {
+	//		d.Status = Pending
+	//		q.Downloads = append(q.Downloads, d)
+	//		_ = SaveQueuesToFile()
+	//	}
+	//}
 
 	return nil
 }
