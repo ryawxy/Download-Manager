@@ -68,13 +68,15 @@ func (m MainStage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 	case exitQueuesMsg:
-		// Deactivate the current tab so that tabs menu is shown.
+		m.tabs[m.currentTab] = m.tabs[m.currentTab].setActive(false)
+		return m, nil
+	case exitDownloadsMsg:
 		m.tabs[m.currentTab] = m.tabs[m.currentTab].setActive(false)
 		return m, nil
 
-	case tea.WindowSizeMsg: // Handles terminal resizing
-		m.height = msg.Height // Update stored height dynamically
-		m.width = msg.Width   // Update stored width dynamically
+	case tea.WindowSizeMsg:
+		m.height = msg.Height
+		m.width = msg.Width
 	}
 	for _, tab := range m.tabs {
 		if tab.isActivated() {
@@ -108,7 +110,6 @@ var (
 )
 
 func (m MainStage) View() string {
-	// Generate tab labels
 	var renderedTabs []string
 	for i, tab := range m.tabs {
 		if i == m.currentTab {
@@ -118,26 +119,19 @@ func (m MainStage) View() string {
 		}
 	}
 
-	// Tab navigation bar
 	tabs := lipgloss.JoinVertical(lipgloss.Top, renderedTabs...)
 	content := m.tabs[m.currentTab].View()
 
-	// Footer text
 	footerText := fmt.Sprintf(" Active Tab: %s %s", m.tabs[m.currentTab].toString(), m.tabs[m.currentTab].getFooter())
 	footer := footerStyle.Render(footerText)
 
-	// Properly position footer at the **BOTTOM** of the terminal
 	body := lipgloss.JoinHorizontal(lipgloss.Left, tabs, "     ", content)
 
-	// Calculate available space for content
 	contentHeight := lipgloss.Height(body)
-	remainingSpace := m.height - contentHeight - 2 // Adjusted spacing
-
-	// Ensure at least some space before footer
+	remainingSpace := m.height - contentHeight - 2
 	if remainingSpace < 0 {
 		remainingSpace = 0
 	}
 
-	// Use `lipgloss.Place` to enforce bottom positioning
 	return body + lipgloss.Place(m.width, max(m.height-lipgloss.Height(body), 0), lipgloss.Left, lipgloss.Bottom, footer)
 }

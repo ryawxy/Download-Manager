@@ -2,6 +2,7 @@ package main
 
 import (
 	"IDM/internal"
+	"IDM/internal/tui"
 	"bufio"
 	"fmt"
 	"os"
@@ -19,8 +20,10 @@ func init() {
 }
 
 func main() {
-	//	tui.Start()
+	tui.Start()
 
+}
+func cliMain() {
 	err := internal.LoadQueuesFromFile()
 	if err != nil {
 		fmt.Println("Error loading queues:", err)

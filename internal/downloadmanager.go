@@ -46,12 +46,12 @@ func getFileNameFromHeader(resp *http.Response) (string, bool) {
 	}
 
 	// it returns the media type automatically!
-	mediaType, params, err := mime.ParseMediaType(contentDisp)
+	_, params, err := mime.ParseMediaType(contentDisp)
 	if err != nil {
 		return "", false
 	}
 
-	fmt.Println("DEBUGGING PRINT !!! MediaType is: ", mediaType)
+	//fmt.Println("DEBUGGING PRINT !!! MediaType is: ", mediaType)
 
 	filename, ok := params["filename"]
 	return filename, ok
@@ -225,7 +225,7 @@ func mergeFiles(download *Download) error {
 		os.Remove(partPath)
 	}
 
-	fmt.Println("Download complete.")
+	//fmt.Println("Download complete.")
 	return nil
 }
 func (download *Download) CancelDownload() {
@@ -247,14 +247,14 @@ func (download *Download) changeDownloadStatus() {
 		download.Status = Failed
 	}
 
-	fmt.Printf("Download status updated: %s -> %s\n", download.FileName, download.Status)
+	//	fmt.Printf("Download status updated: %s -> %s\n", download.FileName, download.Status)
 }
 
 func (dm *DownloadManager) deleteFromQueue(download *Download, queue *Queue) {
 	//TODO
 }
 
-func (download *Download) retry() {
+func (download *Download) Retry() {
 	if download.Status != Failed {
 		fmt.Println("Retry not allowed, download isn't in failed status")
 		return
