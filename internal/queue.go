@@ -13,7 +13,6 @@ type Queue struct {
 	Id                     string       `json:"id"`
 	Downloads              []*Download  `json:"downloads"`
 	Directory              string       `json:"directory"`
-	NumberOfFilesLimit     int          `json:"number_of_files_limit"`
 	BandwidthLimit         int          `json:"bandwidth_limit"`
 	NumberOfTriesLimit     int          `json:"number_of_tries_limit"`
 	StartTime              time.Time    `json:"start_time"`
@@ -223,7 +222,6 @@ func ListQueues() {
 		fmt.Printf("  - Number of Downloads: %d\n", len(q.Downloads))
 		fmt.Printf("  - Max Concurrent Downloads: %d\n", q.MaxConcurrentDownloads)
 		fmt.Printf("  - Bandwidth Limit: %d bytes/sec\n", q.BandwidthLimit)
-		fmt.Printf("  - File Limit: %d\n", q.NumberOfFilesLimit)
 		fmt.Printf("  - Start Time: %s\n", q.StartTime.Format("15:04:05"))
 		fmt.Printf("  - End Time: %s\n", q.EndTime.Format("15:04:05"))
 		fmt.Println("-------------------------------")

@@ -167,9 +167,13 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 
 		download.Manager.Mutex.Lock()
 		download.DownloadedBytes += int64(n)
+		percentage := float64(download.DownloadedBytes) / float64(download.FileSize) * 100
+		download.Progress = int64(percentage)
 		download.Manager.Mutex.Unlock()
 
 		download.ShowProgress()
+		download.changeDownloadStatus()
+		SaveQueuesToFile()
 	}
 }
 func (download *Download) StartDownload() error {
@@ -235,9 +239,9 @@ func (download *Download) changeDownloadStatus() {
 
 	if download.Progress == 0 {
 		download.Status = Pending
-	} else if download.Progress > 0 && download.Progress < download.TotalBytes {
+	} else if download.Progress > 0 && download.Progress < download.FileSize {
 		download.Status = InProgress
-	} else if download.Progress >= download.TotalBytes {
+	} else if download.Progress >= download.FileSize {
 		download.Status = Completed
 	} else {
 		download.Status = Failed
@@ -293,10 +297,10 @@ func (download *Download) ShowProgress() {
 	download.Manager.Mutex.Lock()
 	defer download.Manager.Mutex.Unlock()
 
-	percentage := float64(download.DownloadedBytes) / float64(download.FileSize) * 100
-	barLength := 30
-	filled := int(percentage / 100 * float64(barLength))
-	bar := strings.Repeat("█", filled) + strings.Repeat("-", barLength-filled)
-
-	fmt.Printf("\rDownloading: [%s] %.2f%%", bar, percentage)
+	download.Progress = int64(float64(download.DownloadedBytes) / float64(download.FileSize) * 100)
+	//barLength := 30
+	//filled := int(percentage / 100 * float64(barLength))
+	//bar := strings.Repeat("█", filled) + strings.Repeat("-", barLength-filled)
+	//
+	//fmt.Printf("\rDownloading: [%s] %.2f%%", bar, percentage)
 }

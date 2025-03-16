@@ -20,7 +20,6 @@ type Download struct {
 	FileSize        int64  `json:"FileSize"`
 	Status          Status `json:"status"`
 	Progress        int64  `json:"progress"`
-	TotalBytes      int64  `json:"total_bytes"`
 	StartTime       time.Time
 	Manager         *DownloadManager `json:"-"`
 	Paused          bool

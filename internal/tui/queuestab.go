@@ -27,9 +27,9 @@ type QueuesTab struct {
 
 func temporaryRandomQueues() []internal.Queue {
 	return []internal.Queue{
-		{Id: "queue1", Directory: "Downloads/queue1", NumberOfFilesLimit: 5, BandwidthLimit: 1000, NumberOfTriesLimit: 3, StartTime: time.Now(), EndTime: time.Now().Add(2 * time.Hour)},
-		{Id: "queue2", Directory: "Downloads/queue2", NumberOfFilesLimit: 10, BandwidthLimit: 2000, NumberOfTriesLimit: 2, StartTime: time.Now(), EndTime: time.Now().Add(3 * time.Hour)},
-		{Id: "queue3", Directory: "Downloads/queue3", NumberOfFilesLimit: 7, BandwidthLimit: 1500, NumberOfTriesLimit: 4, StartTime: time.Now(), EndTime: time.Now().Add(1 * time.Hour)},
+		{Id: "queue1", Directory: "Downloads/queue1", MaxConcurrentDownloads: 5, BandwidthLimit: 1000, NumberOfTriesLimit: 3, StartTime: time.Now(), EndTime: time.Now().Add(2 * time.Hour)},
+		{Id: "queue2", Directory: "Downloads/queue2", MaxConcurrentDownloads: 10, BandwidthLimit: 2000, NumberOfTriesLimit: 2, StartTime: time.Now(), EndTime: time.Now().Add(3 * time.Hour)},
+		{Id: "queue3", Directory: "Downloads/queue3", MaxConcurrentDownloads: 7, BandwidthLimit: 1500, NumberOfTriesLimit: 4, StartTime: time.Now(), EndTime: time.Now().Add(1 * time.Hour)},
 	}
 }
 
@@ -56,9 +56,9 @@ func NewQueuesTab() *QueuesTab {
 
 func (q *QueuesTab) updateCurrentQueue() {
 	q.queues[q.queueCursor].Directory = q.inputs[0].Value()
-	q.queues[q.queueCursor].NumberOfFilesLimit, _ = strconv.Atoi(q.inputs[1].Value())
+	q.queues[q.queueCursor].MaxConcurrentDownloads, _ = strconv.Atoi(q.inputs[3].Value())
 	q.queues[q.queueCursor].BandwidthLimit, _ = strconv.Atoi(q.inputs[2].Value())
-	q.queues[q.queueCursor].NumberOfTriesLimit, _ = strconv.Atoi(q.inputs[3].Value())
+	q.queues[q.queueCursor].NumberOfTriesLimit, _ = strconv.Atoi(q.inputs[1].Value())
 	q.queues[q.queueCursor].StartTime, _ = time.Parse("2006-01-02 15:04:05", q.inputs[4].Value())
 	q.queues[q.queueCursor].EndTime, _ = time.Parse("2006-01-02 15:04:05", q.inputs[5].Value())
 }
@@ -66,12 +66,12 @@ func (q *QueuesTab) updateCurrentQueue() {
 func (q *QueuesTab) setInputs() {
 	q.inputs[0].SetValue(q.queues[q.queueCursor].Directory)
 	q.inputs[0].CursorEnd()
-	q.inputs[1].SetValue(strconv.Itoa(q.queues[q.queueCursor].NumberOfFilesLimit))
-	q.inputs[1].CursorEnd()
+	q.inputs[3].SetValue(strconv.Itoa(q.queues[q.queueCursor].MaxConcurrentDownloads))
+	q.inputs[3].CursorEnd()
 	q.inputs[2].SetValue(strconv.Itoa(q.queues[q.queueCursor].BandwidthLimit))
 	q.inputs[2].CursorEnd()
-	q.inputs[3].SetValue(strconv.Itoa(q.queues[q.queueCursor].NumberOfTriesLimit))
-	q.inputs[3].CursorEnd()
+	q.inputs[1].SetValue(strconv.Itoa(q.queues[q.queueCursor].NumberOfTriesLimit))
+	q.inputs[1].CursorEnd()
 	q.inputs[4].SetValue(q.queues[q.queueCursor].StartTime.Format("2006-01-02 15:04:05"))
 	q.inputs[4].CursorEnd()
 	q.inputs[5].SetValue(q.queues[q.queueCursor].EndTime.Format("2006-01-02 15:04:05"))

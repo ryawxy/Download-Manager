@@ -24,11 +24,11 @@ func generateRandomDownloads(n int) []internal.Download {
 	downloads := make([]internal.Download, n)
 	for i := 0; i < n; i++ {
 		downloads[i] = internal.Download{
-			FileName:   fmt.Sprintf("File %d", i),
-			Status:     internal.InProgress,
-			Progress:   int64(i * 10),
-			TotalBytes: int64(100),
-			StartTime:  time.Now(),
+			FileName:  fmt.Sprintf("File %d", i),
+			Status:    internal.InProgress,
+			Progress:  int64(i * 10),
+			FileSize:  int64(100),
+			StartTime: time.Now(),
 		}
 	}
 	return downloads
@@ -57,7 +57,7 @@ func NewDownloadsTab() DownloadsTab {
 func calculateTimeLeft(d internal.Download) string {
 	if d.Status == internal.InProgress && d.Progress > 0 {
 		elapsed := time.Since(d.StartTime).Seconds()
-		total := float64(d.TotalBytes) / float64(d.Progress) * 100
+		total := float64(d.FileSize) / float64(d.Progress) * 100
 		remaining := total - elapsed
 		return fmt.Sprintf("%.0fs", remaining)
 	}
@@ -246,7 +246,7 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if existing, found := downloadMap[download.FileName]; found {
 					existing.Progress = download.Progress
 					existing.Status = download.Status
-					existing.TotalBytes = download.TotalBytes
+					existing.FileSize = download.FileSize
 				} else {
 					newDownloads = append(newDownloads, download)
 				}
