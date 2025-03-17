@@ -104,7 +104,7 @@ func (q *Queue) RemoveDownload(name string) error {
 func StartQueueDownloads(q *Queue) {
 	q.mutex.Lock()
 	if q.Paused {
-		fmt.Printf("Queue %s is paused. Downloads won't start", q.Id)
+		fmt.Printf("Queue %s is paused. Downloads won't start\n", q.Id)
 		q.mutex.Unlock()
 		return
 	}
@@ -149,7 +149,7 @@ func StartQueueDownloads(q *Queue) {
 
 			err := d.GetFileSizeAndName()
 			if err != nil {
-				fmt.Println("Error getting file info for", d.URL)
+				fmt.Printf("Error getting file info for %s: %v\n", d.URL, err)
 				<-sem
 				return
 			}

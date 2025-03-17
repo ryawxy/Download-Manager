@@ -23,11 +23,6 @@ type DownloadManager struct {
 	TokenBucket *TokenBucket
 }
 
-/*
-	NewDownloadManager is just a simple constructor, don't worry :)
-
-better to implement at future I guess, we can create multiple DM
-*/
 func (download *Download) NewDownloadManager(workers int, tb *TokenBucket) *DownloadManager {
 	ctx, cancel := context.WithCancel(context.Background())
 	download.Manager = &DownloadManager{
@@ -75,10 +70,6 @@ func (download *Download) getFileNameFromURL() string {
 	return filename
 }
 
-/*
-http.Head() sends a HEAD request to server,
-and returns headResponse only (not file content)
-*/
 func (download *Download) GetFileSizeAndName() error {
 	headResp, err := http.Head(download.URL)
 	if err != nil {
@@ -118,11 +109,24 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 		fmt.Println("Error during download:", err)
 		return
 	}
+
+	encoding := resp.Header.Get("Content-Encoding")
+	if encoding == "gzip" {
+		fmt.Println("Warning: Server is compressing the response, decoding needed!")
+		// Decompress manually using gzip.Reader
+	}
+
 	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusPartialContent && start != 0 {
+		fmt.Println("Warning: Server does not support partial content properly.")
+	}
 
 	partFileName := fmt.Sprintf("%s.part%d", download.FileName, partNum)
 	fullPath := filepath.Join(download.Directory, partFileName)
-	file, err := os.Create(fullPath)
+	//file, err := os.Create(fullPath)
+	file, err := os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY, 0644)
+
 	if err != nil {
 		fmt.Println("Error creating part file:", err)
 		return
@@ -130,6 +134,8 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 	defer file.Close()
 
 	buf := make([]byte, 1024)
+	totalBytesRead := int64(0)
+
 	for {
 		download.Manager.Mutex.Lock()
 		for download.Paused {
@@ -154,6 +160,12 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 			return
 		}
 
+		// Control overlapping among workers
+		remaining := end - start + 1 - totalBytesRead
+		if int64(n) > remaining {
+			n = int(remaining)
+		}
+
 		// Apply rate limiting
 		if download.Manager.TokenBucket != nil {
 			download.Manager.TokenBucket.WaitAndTake(n)
@@ -174,9 +186,24 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 		download.ShowProgress()
 		download.changeDownloadStatus()
 		SaveQueuesToFile()
+
+		totalBytesRead += int64(n)
+		if totalBytesRead >= (end - start + 1) {
+			break
+		}
 	}
 }
 func (download *Download) StartDownload() error {
+
+	// move this if/else to the constructor if you want to check quicker
+	if !download.CheckRangeSupport() {
+		fmt.Println("Server does NOT support partial downloads. Switching to single-threaded mode...")
+		download.Manager.Workers = 1
+		download.Manager.ChunkSize = download.FileSize
+	} else {
+		fmt.Println("Server supports partial downloads. Using multi-threaded mode.")
+	}
+
 	if err := os.MkdirAll(download.Directory, 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %v", err)
 	}
@@ -186,12 +213,21 @@ func (download *Download) StartDownload() error {
 		return err
 	}
 
+	chunkSize := download.FileSize / int64(download.Manager.Workers)
+	remainingBytes := download.FileSize % int64(download.Manager.Workers)
+
 	var wg sync.WaitGroup
 	for i := 0; i < download.Manager.Workers; i++ {
-		start := int64(i) * download.Manager.ChunkSize
-		end := start + download.Manager.ChunkSize - 1
-		if end >= download.FileSize {
-			end = download.FileSize - 1
+		//start := int64(i) * download.Manager.ChunkSize
+		start := int64(i) * chunkSize
+		//end := start + download.Manager.ChunkSize - 1
+		end := start + chunkSize - 1
+
+		//if end >= download.FileSize {
+		//	end = download.FileSize - 1
+		//}
+		if i == download.Manager.Workers-1 {
+			end += remainingBytes
 		}
 
 		wg.Add(1)
@@ -206,23 +242,36 @@ func mergeFiles(download *Download) error {
 	outputPath := filepath.Join(download.Directory, download.FileName)
 	outputFile, err := os.Create(outputPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create merged file: %v", err)
 	}
 	defer outputFile.Close()
 
+	fmt.Println("merging downloaded parts...")
+
 	for i := 0; i < download.Manager.Workers; i++ {
 		partPath := filepath.Join(download.Directory, fmt.Sprintf("%s.part%d", download.FileName, i))
+
+		if _, err := os.Stat(partPath); os.IsNotExist(err) {
+			fmt.Printf("Warning: Part %d is missing, skipping...\n", i)
+			continue
+		}
+
 		partFile, err := os.Open(partPath)
 		if err != nil {
-			return err
+			return fmt.Errorf("Error opening part %d: %v\n", i, err)
 		}
 
 		_, err = io.Copy(outputFile, partFile)
 		if err != nil {
+			partFile.Close()
+			fmt.Printf("Error copying part %d: %v\n", i, err)
 			return err
 		}
 		partFile.Close()
-		os.Remove(partPath)
+
+		if err := os.Remove(partPath); err != nil {
+			fmt.Printf("Warning: failed to remove part %d: %v\n", i, err)
+		}
 	}
 
 	//fmt.Println("Download complete.")
@@ -291,6 +340,24 @@ func (download *Download) ResumeDownload() {
 	// For simplicity, re-start the download. In a real app, resume logic would be more complex.
 	go download.StartDownload()
 	fmt.Printf("Resumed download: %s\n", download.FileName)
+}
+
+func (download *Download) CheckRangeSupport() bool {
+	req, err := http.NewRequest("HEAD", download.URL, nil)
+	if err != nil {
+		fmt.Println("Error creating HEAD request:", err)
+		return false
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fmt.Println("Error sending HEAD request:", err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	acceptRanges := resp.Header.Get("Accept-Ranges")
+	return resp.StatusCode == http.StatusPartialContent && acceptRanges == "bytes"
 }
 
 func (download *Download) ShowProgress() {
