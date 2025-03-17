@@ -3,6 +3,7 @@ package tui
 //todo update README.md
 
 import (
+	"IDM/internal"
 	"fmt"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -73,6 +74,11 @@ func (m MainStage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case exitDownloadsMsg:
 		m.tabs[m.currentTab] = m.tabs[m.currentTab].setActive(false)
 		return m, nil
+
+	case internal.ProgressMsg:
+		return m, tea.Tick(time.Millisecond*500, func(t time.Time) tea.Msg {
+			return tickMsg(t)
+		})
 
 	case tea.WindowSizeMsg:
 		m.height = msg.Height

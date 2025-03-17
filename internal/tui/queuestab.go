@@ -132,15 +132,12 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					q.contentCursor++
 				}
 			case "right":
-				// Enter field editing mode.
 				q.controlContent = true
 			case "left":
 				if q.controlContent {
-					// Exit field editing mode.
 					q.controlContent = false
 					q.contentCursor = -1
 				} else {
-					// Not editing fields: exit to tabs menu.
 					return q, func() tea.Msg { return exitQueuesMsg{} }
 				}
 			case "n":

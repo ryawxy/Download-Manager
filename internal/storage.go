@@ -55,6 +55,7 @@ func LoadQueuesFromFile() error {
 		q.EndTime = q.EndTime.UTC()
 		rate := time.Second / time.Duration(q.BandwidthLimit)
 		q.TokenBucket = NewTokenBucket(q.BandwidthLimit, rate)
+
 	}
 
 	//fmt.Println("Queues loaded successfully.")

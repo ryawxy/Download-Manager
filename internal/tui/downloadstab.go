@@ -3,10 +3,11 @@ package tui
 import (
 	"IDM/internal"
 	"fmt"
-	"github.com/charmbracelet/bubbles/progress"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/progress"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -69,7 +70,14 @@ func calculateTimeLeft(d internal.Download) string {
 }
 
 func getQueueName(download *internal.Download) string {
-	for _, queue := range internal.QueuesList {
+	// Iterate over queues in sorted order by key for stability.
+	var keys []string
+	for key := range internal.QueuesList {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		queue := internal.QueuesList[key]
 		for _, d := range queue.Downloads {
 			if d.FileName == download.FileName {
 				return queue.Id
@@ -96,8 +104,8 @@ func getActions(status internal.Status) []string {
 	}
 }
 
-func (d DownloadsTab) RenderTable() string {
-	// Define header columns including the new "Action" column.
+func (d *DownloadsTab) RenderTable() string {
+	// Header includes a new "Action" column.
 	columns := []string{"Filename", "Queue", "Progress", "Time Left", "Status", "Action"}
 	var headerRow []string
 	for i, col := range columns {
@@ -106,12 +114,12 @@ func (d DownloadsTab) RenderTable() string {
 	table := headerStyle.Render(strings.Join(headerRow, " ")) + "\n"
 
 	progressBar := progress.New(
-		progress.WithWidth(colWidths[2]-2), // Account for padding
+		progress.WithWidth(colWidths[2]-2),
 		progress.WithGradient("#0077BE", "#39FF14"),
 		progress.WithFillCharacters('▬', '-'),
+		progress.WithoutPercentage(),
 	)
 
-	// Render each row.
 	for i, entry := range d.downloads {
 		if i < d.pageStart || i >= d.pageStart+tableSize {
 			continue
@@ -119,69 +127,60 @@ func (d DownloadsTab) RenderTable() string {
 
 		queueName := getQueueName(entry)
 		actions := getActions(entry.Status)
-		var actionStr string
-
+		var defaultAction string
 		if len(actions) > 0 {
-			if d.cursor == i && d.showOptions {
-				var parts []string
-				for j, act := range actions {
+			defaultAction = actions[0]
+		}
+
+		rowStr := []string{
+			entry.FileName,
+			queueName,
+			progressBar.ViewAs(float64(entry.Progress) / 100.0),
+			calculateTimeLeft(*entry),
+			string(entry.Status),
+			defaultAction,
+		}
+		var renderedRow string
+		if i == d.cursor {
+			// Selected row.
+			renderedRow = selectedRowStyle.Copy().Width(colWidths[0]).Render(rowStr[0]) + " " +
+				selectedRowStyle.Copy().Width(colWidths[1]).Render(rowStr[1]) + " " +
+				selectedRowStyle.Copy().Width(colWidths[2]).Render(rowStr[2]) + " " +
+				selectedRowStyle.Copy().Width(colWidths[3]).Render(rowStr[3]) + " " +
+				selectedRowStyle.Copy().Width(colWidths[4]).Render(rowStr[4]) + " "
+			if d.showOptions {
+				// When options are shown, display all options.
+				if d.optionsCursor >= len(actions) {
+					d.optionsCursor = 0
+				}
+				var styledActions []string
+				for j, action := range actions {
 					if j == d.optionsCursor {
-						parts = append(parts, selectedRowStyle.Render(act))
+						styledActions = append(styledActions, selectedRowStyle.Render(action))
 					} else {
-						parts = append(parts, rowStyle.Render(act))
+						styledActions = append(styledActions, rowStyle.Render(action))
 					}
 				}
-				actionStr = "[" + strings.Join(parts, "|") + "]"
+				renderedRow += "[" + strings.Join(styledActions, "|") + "]"
 			} else {
-				actionStr = "[" + strings.Join(actions, "|") + "]"
+				renderedRow += selectedRowStyle.Copy().Width(colWidths[5]).Render(defaultAction)
 			}
-		}
-
-		// Create styled columns with strict width constraints
-		columns := []string{
-			lipgloss.NewStyle().
-				Width(colWidths[0]).
-				MaxWidth(colWidths[0]).
-				Render(entry.FileName),
-			lipgloss.NewStyle().
-				Width(colWidths[1]).
-				Render(queueName),
-			lipgloss.NewStyle().
-				Width(colWidths[2]).
-				Render(progressBar.ViewAs(float64(entry.Progress) / 100.0)),
-			lipgloss.NewStyle().
-				Width(colWidths[3]).
-				Render(calculateTimeLeft(*entry)),
-			lipgloss.NewStyle().
-				Width(colWidths[4]).
-				Render(string(entry.Status)),
-			lipgloss.NewStyle().
-				Width(colWidths[5]).
-				MaxWidth(colWidths[5]).
-				Render(actionStr),
-		}
-
-		// Join columns horizontally
-		rowContent := lipgloss.JoinHorizontal(
-			lipgloss.Left,
-			columns[0], " ",
-			columns[1], " ",
-			columns[2], " ",
-			columns[3], " ",
-			columns[4], " ",
-			columns[5],
-		)
-
-		// Apply row styling
-		if i == d.cursor {
-			table += "  " + selectedRowStyle.Render(rowContent) + "\n"
+			table += "  " + renderedRow + "\n"
 		} else {
-			table += " " + rowStyle.Render(rowContent) + "\n"
+			// Non-selected row.
+			renderedRow = rowStyle.Copy().Width(colWidths[0]).Render(rowStr[0]) + " " +
+				rowStyle.Copy().Width(colWidths[1]).Render(rowStr[1]) + " " +
+				rowStyle.Copy().Width(colWidths[2]).Render(rowStr[2]) + " " +
+				rowStyle.Copy().Width(colWidths[3]).Render(rowStr[3]) + " " +
+				rowStyle.Copy().Width(colWidths[4]).Render(rowStr[4]) + " " +
+				rowStyle.Copy().Width(colWidths[5]).Render(rowStr[5])
+			table += " " + renderedRow + "\n"
 		}
 	}
 
 	return table
 }
+
 func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -217,16 +216,9 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "left":
 			if d.showOptions {
+				// Instead of rotating options, exit options mode so that tab switching can work.
 				d.showOptions = false
 				d.optionsCursor = -1
-				actions := getActions(d.downloads[d.cursor].Status)
-				if len(actions) > 0 {
-					if d.optionsCursor > 0 {
-						d.optionsCursor--
-					} else {
-						d.optionsCursor = len(actions) - 1
-					}
-				}
 			} else {
 				d.isActive = false
 				return d, func() tea.Msg { return exitDownloadsMsg{} }
@@ -248,10 +240,9 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					case "Retry":
 						d.downloads[d.cursor].Retry()
 					case "Delete":
-						// TODO: Implement deletion logic.
 						fmt.Printf("Delete %s\n", d.downloads[d.cursor].FileName)
 					default:
-						fmt.Printf("Action %s on %s\n", selectedAction, d.downloads[d.cursor].FileName)
+						fmt.Printf("Selected action: %s on %s\n", selectedAction, d.downloads[d.cursor].FileName)
 					}
 				}
 				d.showOptions = false
@@ -261,31 +252,45 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case tickMsg:
-		downloadMap := make(map[string]*internal.Download)
+		// Update each download in place to preserve order.
+		currentMap := make(map[string]bool)
 		for _, dl := range d.downloads {
-			downloadMap[dl.FileName] = dl
+			currentMap[dl.FileName] = true
 		}
-		newDownloads := make([]*internal.Download, 0)
-		for _, queue := range internal.QueuesList {
+		// Iterate over queues in sorted order by key.
+		var keys []string
+		for key := range internal.QueuesList {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			queue := internal.QueuesList[key]
 			for _, download := range queue.Downloads {
-				if existing, found := downloadMap[download.FileName]; found {
-					existing.Progress = download.Progress
-					existing.Status = download.Status
-					existing.FileSize = download.FileSize
-				} else {
-					newDownloads = append(newDownloads, download)
+				found := false
+				for i, dl := range d.downloads {
+					if dl.FileName == download.FileName {
+						d.downloads[i].Progress = download.Progress
+						d.downloads[i].Status = download.Status
+						d.downloads[i].FileSize = download.FileSize
+						found = true
+						break
+					}
+				}
+				if !found {
+					d.downloads = append(d.downloads, download)
+					currentMap[download.FileName] = true
 				}
 			}
 		}
-		d.downloads = append(d.downloads, newDownloads...)
-		return d, tickCmd()
+		if d.cursor < d.pageStart {
+			d.pageStart = d.cursor
+		} else if d.pageStart+tableSize <= d.cursor {
+			d.pageStart = d.cursor - tableSize + 1
+		}
+		return d, tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
+			return tickMsg(t)
+		})
 	}
-	if d.cursor < d.pageStart {
-		d.pageStart = d.cursor
-	} else if d.pageStart+tableSize <= d.cursor {
-		d.pageStart = d.cursor - tableSize + 1
-	}
-
 	return d, nil
 }
 
@@ -312,7 +317,9 @@ func (d DownloadsTab) toString() string {
 }
 
 func (d DownloadsTab) Init() tea.Cmd {
-	return nil
+	return tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
 }
 
 func (d DownloadsTab) getFooter() string {

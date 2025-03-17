@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"fmt"
+	tea "github.com/charmbracelet/bubbletea"
 	"io"
 	"mime"
 	"net/http"
@@ -21,6 +22,9 @@ type DownloadManager struct {
 	Ctx         context.Context
 	Mutex       sync.Mutex
 	TokenBucket *TokenBucket
+}
+type ProgressMsg struct {
+	Download *Download
 }
 
 func (download *Download) NewDownloadManager(workers int, tb *TokenBucket) *DownloadManager {
@@ -183,6 +187,11 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 		download.Progress = int64(percentage)
 		download.Manager.Mutex.Unlock()
 
+		cmd := func() tea.Msg {
+			return ProgressMsg{Download: download}
+		}
+		tea.Println(cmd)
+
 		download.ShowProgress()
 		download.changeDownloadStatus()
 		SaveQueuesToFile()
@@ -195,7 +204,6 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 }
 func (download *Download) StartDownload() error {
 
-	// move this if/else to the constructor if you want to check quicker
 	if !download.CheckRangeSupport() {
 		fmt.Println("Server does NOT support partial downloads. Switching to single-threaded mode...")
 		download.Manager.Workers = 1
