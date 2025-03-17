@@ -92,10 +92,22 @@ func (q *Queue) AddDownload(d *Download) error {
 func (q *Queue) RemoveDownload(name string) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
+
+	// Find and remove from this queue
 	for i, d := range q.Downloads {
 		if d.FileName == name {
 			q.Downloads = append(q.Downloads[:i], q.Downloads[i+1:]...)
 			_ = SaveQueuesToFile()
+
+			for j, globalDL := range DownloadsList {
+				if globalDL.FileName == name {
+					DownloadsList = append(
+						DownloadsList[:j],
+						DownloadsList[j+1:]...,
+					)
+					break
+				}
+			}
 			return nil
 		}
 	}

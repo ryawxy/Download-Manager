@@ -53,7 +53,7 @@ var (
 				Padding(0, 1)
 )
 
-var colWidths = []int{15, 10, 30, 12, 12, 20}
+var colWidths = []int{20, 15, 30, 12, 12, 30}
 
 func NewDownloadsTab() DownloadsTab {
 	return DownloadsTab{downloads: internal.DownloadsList, cursor: 0, pageStart: 0}
@@ -94,18 +94,17 @@ func getActions(status internal.Status) []string {
 	case internal.Failed:
 		return []string{"Retry", "Delete"}
 	case internal.Paused:
-		return []string{"Resume", "Cancel"}
+		return []string{"Resume", "Cancel", "Delete"}
 	case internal.InProgress:
-		return []string{"Pause", "Cancel"}
+		return []string{"Pause", "Cancel", "Delete"}
 	case internal.Pending:
-		return []string{"Start"}
+		return []string{"Start", "Delete"}
 	default:
-		return []string{"Start"}
+		return []string{"Start", "Delete"}
 	}
 }
-
-func (d *DownloadsTab) RenderTable() string {
-	// Header includes a new "Action" column.
+func (d DownloadsTab) RenderTable() string {
+	// Define header columns including the new "Action" column.
 	columns := []string{"Filename", "Queue", "Progress", "Time Left", "Status", "Action"}
 	var headerRow []string
 	for i, col := range columns {
@@ -114,12 +113,12 @@ func (d *DownloadsTab) RenderTable() string {
 	table := headerStyle.Render(strings.Join(headerRow, " ")) + "\n"
 
 	progressBar := progress.New(
-		progress.WithWidth(colWidths[2]-2),
+		progress.WithWidth(colWidths[2]-2), // Account for padding
 		progress.WithGradient("#0077BE", "#39FF14"),
 		progress.WithFillCharacters('▬', '-'),
-		progress.WithoutPercentage(),
 	)
 
+	// Render each row.
 	for i, entry := range d.downloads {
 		if i < d.pageStart || i >= d.pageStart+tableSize {
 			continue
@@ -127,54 +126,58 @@ func (d *DownloadsTab) RenderTable() string {
 
 		queueName := getQueueName(entry)
 		actions := getActions(entry.Status)
-		var defaultAction string
-		if len(actions) > 0 {
-			defaultAction = actions[0]
-		}
+		var actionStr string
 
-		rowStr := []string{
-			entry.FileName,
-			queueName,
-			progressBar.ViewAs(float64(entry.Progress) / 100.0),
-			calculateTimeLeft(*entry),
-			string(entry.Status),
-			defaultAction,
-		}
-		var renderedRow string
-		if i == d.cursor {
-			// Selected row.
-			renderedRow = selectedRowStyle.Copy().Width(colWidths[0]).Render(rowStr[0]) + " " +
-				selectedRowStyle.Copy().Width(colWidths[1]).Render(rowStr[1]) + " " +
-				selectedRowStyle.Copy().Width(colWidths[2]).Render(rowStr[2]) + " " +
-				selectedRowStyle.Copy().Width(colWidths[3]).Render(rowStr[3]) + " " +
-				selectedRowStyle.Copy().Width(colWidths[4]).Render(rowStr[4]) + " "
-			if d.showOptions {
-				// When options are shown, display all options.
-				if d.optionsCursor >= len(actions) {
-					d.optionsCursor = 0
-				}
-				var styledActions []string
-				for j, action := range actions {
+		if len(actions) > 0 {
+			if d.cursor == i && d.showOptions {
+				var parts []string
+				for j, act := range actions {
 					if j == d.optionsCursor {
-						styledActions = append(styledActions, selectedRowStyle.Render(action))
+						parts = append(parts, selectedRowStyle.Render(act))
 					} else {
-						styledActions = append(styledActions, rowStyle.Render(action))
+						parts = append(parts, rowStyle.Render(act))
 					}
 				}
-				renderedRow += "[" + strings.Join(styledActions, "|") + "]"
+				actionStr = "[" + strings.Join(parts, "|") + "]"
 			} else {
-				renderedRow += selectedRowStyle.Copy().Width(colWidths[5]).Render(defaultAction)
+				actionStr = "[" + strings.Join(actions, "|") + "]"
 			}
-			table += "  " + renderedRow + "\n"
+		}
+		columns := []string{
+			lipgloss.NewStyle().
+				Width(colWidths[0]).
+				MaxWidth(colWidths[0]).
+				Render(entry.FileName),
+			lipgloss.NewStyle().
+				Width(colWidths[1]).
+				Render(queueName),
+			lipgloss.NewStyle().
+				Width(colWidths[2]).
+				Render(progressBar.ViewAs(float64(entry.Progress) / 100.0)),
+			lipgloss.NewStyle().
+				Width(colWidths[3]).
+				Render(calculateTimeLeft(*entry)),
+			lipgloss.NewStyle().
+				Width(colWidths[4]).
+				Render(string(entry.Status)),
+			lipgloss.NewStyle().
+				Width(colWidths[5]).
+				MaxWidth(colWidths[5]).
+				Render(actionStr),
+		}
+		rowContent := lipgloss.JoinHorizontal(
+			lipgloss.Left,
+			columns[0], " ",
+			columns[1], " ",
+			columns[2], " ",
+			columns[3], " ",
+			columns[4], " ",
+			columns[5],
+		)
+		if i == d.cursor {
+			table += "  " + selectedRowStyle.Render(rowContent) + "\n"
 		} else {
-			// Non-selected row.
-			renderedRow = rowStyle.Copy().Width(colWidths[0]).Render(rowStr[0]) + " " +
-				rowStyle.Copy().Width(colWidths[1]).Render(rowStr[1]) + " " +
-				rowStyle.Copy().Width(colWidths[2]).Render(rowStr[2]) + " " +
-				rowStyle.Copy().Width(colWidths[3]).Render(rowStr[3]) + " " +
-				rowStyle.Copy().Width(colWidths[4]).Render(rowStr[4]) + " " +
-				rowStyle.Copy().Width(colWidths[5]).Render(rowStr[5])
-			table += " " + renderedRow + "\n"
+			table += " " + rowStyle.Render(rowContent) + "\n"
 		}
 	}
 
@@ -188,6 +191,7 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return d, nil
 		}
 		switch msg.String() {
+
 		case "up":
 			if d.cursor > 0 {
 				d.cursor--
@@ -216,10 +220,14 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "left":
 			if d.showOptions {
-				// Instead of rotating options, exit options mode so that tab switching can work.
 				d.showOptions = false
 				d.optionsCursor = -1
 			} else {
+				if len(d.downloads) == 0 {
+					d.isActive = false
+					d.cursor = -1
+					return d, func() tea.Msg { return exitDownloadsMsg{} }
+				}
 				d.isActive = false
 				return d, func() tea.Msg { return exitDownloadsMsg{} }
 			}
@@ -240,7 +248,27 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					case "Retry":
 						d.downloads[d.cursor].Retry()
 					case "Delete":
-						fmt.Printf("Delete %s\n", d.downloads[d.cursor].FileName)
+						selectedDL := d.downloads[d.cursor]
+						if queue, exists := internal.QueuesList[selectedDL.QueueName]; exists {
+							err := queue.RemoveDownload(selectedDL.FileName)
+							if err == nil {
+								newDownloads := make([]*internal.Download, 0)
+								for _, dl := range internal.DownloadsList {
+									if dl.FileName != selectedDL.FileName {
+										newDownloads = append(newDownloads, dl)
+									}
+								}
+								internal.DownloadsList = newDownloads
+								d.downloads = internal.DownloadsList
+								if d.cursor >= len(d.downloads) {
+									d.cursor = max(0, len(d.downloads)-1)
+								}
+								if d.cursor >= len(d.downloads) {
+									d.cursor = max(0, len(d.downloads)-1)
+								}
+							}
+						}
+
 					default:
 						fmt.Printf("Selected action: %s on %s\n", selectedAction, d.downloads[d.cursor].FileName)
 					}
@@ -252,12 +280,10 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case tickMsg:
-		// Update each download in place to preserve order.
 		currentMap := make(map[string]bool)
 		for _, dl := range d.downloads {
 			currentMap[dl.FileName] = true
 		}
-		// Iterate over queues in sorted order by key.
 		var keys []string
 		for key := range internal.QueuesList {
 			keys = append(keys, key)
