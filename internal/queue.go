@@ -53,11 +53,12 @@ func (q *Queue) StopDownloads() {
 		fmt.Println("Downloads in queue", q.Id, "stopped due to end time.")
 	}
 }
-
-func (q *Queue) EditQueue(maxConcurrent int, startTime, endTime time.Time, bandwidthLimit int) error {
+func (q *Queue) EditQueue(directory string, retriesLimit, maxConcurrent int, startTime, endTime time.Time, bandwidthLimit int) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 
+	q.Directory = directory
+	q.NumberOfTriesLimit = retriesLimit
 	q.MaxConcurrentDownloads = maxConcurrent
 	q.StartTime = startTime
 	q.EndTime = endTime

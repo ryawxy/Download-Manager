@@ -54,13 +54,24 @@ func NewQueuesTab() *QueuesTab {
 	return tab
 }
 
-func (q *QueuesTab) updateCurrentQueue() {
+func (q QueuesTab) updateCurrentQueue() QueuesTab {
 	q.queues[q.queueCursor].Directory = q.inputs[0].Value()
-	q.queues[q.queueCursor].MaxConcurrentDownloads, _ = strconv.Atoi(q.inputs[3].Value())
-	q.queues[q.queueCursor].BandwidthLimit, _ = strconv.Atoi(q.inputs[2].Value())
 	q.queues[q.queueCursor].NumberOfTriesLimit, _ = strconv.Atoi(q.inputs[1].Value())
+	q.queues[q.queueCursor].BandwidthLimit, _ = strconv.Atoi(q.inputs[2].Value())
+	q.queues[q.queueCursor].MaxConcurrentDownloads, _ = strconv.Atoi(q.inputs[3].Value())
 	q.queues[q.queueCursor].StartTime, _ = time.Parse("2006-01-02 15:04:05", q.inputs[4].Value())
 	q.queues[q.queueCursor].EndTime, _ = time.Parse("2006-01-02 15:04:05", q.inputs[5].Value())
+
+	internalQueue := internal.QueuesList[q.queues[q.queueCursor].Id]
+	internalQueue.EditQueue(
+		q.queues[q.queueCursor].Directory,
+		q.queues[q.queueCursor].NumberOfTriesLimit,
+		q.queues[q.queueCursor].MaxConcurrentDownloads,
+		q.queues[q.queueCursor].StartTime,
+		q.queues[q.queueCursor].EndTime,
+		q.queues[q.queueCursor].BandwidthLimit,
+	)
+	return q
 }
 
 func (q *QueuesTab) setInputs() {
@@ -235,7 +246,6 @@ var (
 
 func (q *QueuesTab) View() string {
 	if q.creatingNewQueue {
-		// Render creation form.
 		form := ""
 		labels := []string{"Name", "Directory", "Retries Limit", "Bandwidth Limit", "Max Concurrent Files Limit", "Start Time", "End Time"}
 		for i, label := range labels {

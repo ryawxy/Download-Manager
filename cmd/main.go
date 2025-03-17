@@ -2,6 +2,7 @@ package main
 
 import (
 	"IDM/internal"
+	"IDM/internal/tui"
 	"bufio"
 	"fmt"
 	"os"
@@ -19,8 +20,8 @@ func init() {
 }
 
 func main() {
-	//tui.Start()
-	cliMain()
+	tui.Start()
+	//cliMain()
 }
 func cliMain() {
 	err := internal.LoadQueuesFromFile()
@@ -86,7 +87,7 @@ func cliMain() {
 			}
 
 			if queue, exists := internal.QueuesList[queueName]; exists {
-				queue.EditQueue(maxConcurrent, startTime, endTime, bandwidthLimit)
+				queue.EditQueue(queue.Directory, queue.NumberOfTriesLimit, maxConcurrent, startTime, endTime, bandwidthLimit)
 			} else {
 				fmt.Println("Queue not found!")
 			}
