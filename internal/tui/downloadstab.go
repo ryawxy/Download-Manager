@@ -221,15 +221,15 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					selectedAction := actions[d.optionsCursor]
 					switch selectedAction {
 					case "Start":
-						d.downloads[d.cursor].StartDownload()
+						go d.downloads[d.cursor].StartDownload()
 					case "Pause":
-						d.downloads[d.cursor].PauseDownload()
+						go d.downloads[d.cursor].PauseDownload()
 					case "Resume":
-						d.downloads[d.cursor].ResumeDownload()
+						go d.downloads[d.cursor].ResumeDownload()
 					case "Cancel":
-						d.downloads[d.cursor].CancelDownload()
+						go d.downloads[d.cursor].CancelDownload()
 					case "Retry":
-						d.downloads[d.cursor].Retry()
+						go d.downloads[d.cursor].Retry()
 					case "Delete":
 						selectedDL := d.downloads[d.cursor]
 						if queue, exists := internal.QueuesList[selectedDL.QueueName]; exists {

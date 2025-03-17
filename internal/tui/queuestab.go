@@ -73,6 +73,7 @@ func (q QueuesTab) updateCurrentQueue() QueuesTab {
 	)
 	return q
 }
+
 func (q *QueuesTab) setInputs() {
 	if len(q.queues) == 0 {
 		return
@@ -106,8 +107,6 @@ func (q *QueuesTab) deleteQueue() {
 	internal.DownloadsList = newDL
 
 	q.queues = internal.DeleteQueue(queueID)
-
-	// Adjust local queueCursor.
 	if q.queueCursor >= len(q.queues) {
 		q.queueCursor = max(0, len(q.queues)-1)
 	}
@@ -119,8 +118,6 @@ func (q *QueuesTab) setActive(b bool) Tab {
 	if b {
 		q.queueCursor = 0
 		q.setInputs()
-	} else {
-		q.queueCursor = -1
 	}
 	return q
 }
@@ -140,6 +137,9 @@ func (q *QueuesTab) Init() tea.Cmd {
 func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if len(q.queues) > 0 && q.queueCursor < 0 {
+			q.queueCursor = 0
+		}
 		if !q.creatingNewQueue {
 			switch msg.String() {
 			case "up":
@@ -165,12 +165,15 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if q.buttonsCursor == -1 {
 					q.controlContent = true
 				} else {
-					q.buttonsCursor = 0
+					q.buttonsCursor = (q.buttonsCursor + 1) % 2
 				}
 			case "left":
 				if q.buttonsCursor != -1 {
-					q.buttonsCursor = -1
-					q.contentCursor = len(q.inputs) - 1
+					if q.buttonsCursor > 0 {
+						q.buttonsCursor--
+					} else {
+						q.buttonsCursor = 1
+					}
 				} else if q.controlContent {
 					q.controlContent = false
 					q.contentCursor = -1
@@ -186,8 +189,18 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				q.buttonsCursor = -1
 			case "enter":
 				if q.buttonsCursor != -1 {
-					// Delete button is selected.
-					q.deleteQueue()
+					if q.buttonsCursor == 0 {
+						currentQueue := q.queues[q.queueCursor]
+						if currentQueue.CancelFunc == nil {
+							go internal.ScheduleQueueDownloads(&currentQueue)
+						} else if currentQueue.Paused {
+							go currentQueue.ResumeQueue()
+						} else {
+							go currentQueue.PauseQueue()
+						}
+					} else if q.buttonsCursor == 1 {
+						go q.deleteQueue()
+					}
 					q.buttonsCursor = -1
 				} else if q.controlContent {
 					q.inputs[q.contentCursor], _ = q.inputs[q.contentCursor].Update(msg)
@@ -200,7 +213,6 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		} else {
-			// Creation mode (unchanged).
 			switch msg.String() {
 			case "up":
 				if q.contentCursor > 0 {
@@ -226,6 +238,9 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						maxconcurrent, _ := strconv.Atoi(q.inputs[4].Value())
 						startTime, _ := time.Parse("15:04", q.inputs[5].Value())
 						endTime, _ := time.Parse("15:04", q.inputs[6].Value())
+						now := time.Now()
+						startTime = time.Date(now.Year(), now.Month(), now.Day(), startTime.Hour(), startTime.Minute(), 0, 0, now.Location())
+						endTime = time.Date(now.Year(), now.Month(), now.Day(), endTime.Hour(), endTime.Minute(), 0, 0, now.Location())
 
 						newQueue := internal.NewQueue(
 							id,
@@ -322,13 +337,28 @@ func (q *QueuesTab) View() string {
 			queueContent += style.Render(label+": "+q.inputs[i].View()) + "\n"
 		}
 	}
+	stateButton := "[State]"
 	deleteButton := "[Delete]"
-	if q.buttonsCursor != -1 {
-		deleteButton = selectedStyle.Render(deleteButton)
+	currentQueue := q.queues[q.queueCursor]
+	if currentQueue.CancelFunc == nil {
+		stateButton = "[Start]"
+	} else if currentQueue.Paused {
+		stateButton = "[Resume]"
 	} else {
-		deleteButton = style.Render(deleteButton)
+		stateButton = "[Pause]"
 	}
-	queueContent += "\n" + deleteButton + "\n"
+	var buttonsLine string
+	if q.buttonsCursor == 0 {
+		buttonsLine += selectedStyle.Render(stateButton) + "  "
+	} else {
+		buttonsLine += style.Render(stateButton) + "  "
+	}
+	if q.buttonsCursor == 1 {
+		buttonsLine += selectedStyle.Render(deleteButton)
+	} else {
+		buttonsLine += style.Render(deleteButton)
+	}
+	queueContent += "\n" + buttonsLine + "\n"
 
 	footer := "Press 'n' for New Queue | '→' to edit fields | '←' to go back | '↑/↓' to navigate | 'Enter' to select"
 	return lipgloss.JoinHorizontal(lipgloss.Top, queueList, "   ", queueContent) + "\n" + footer

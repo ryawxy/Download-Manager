@@ -296,9 +296,9 @@ func (download *Download) changeDownloadStatus() {
 
 	if download.Progress == 0 {
 		download.Status = Pending
-	} else if download.Progress > 0 && download.Progress < download.FileSize {
+	} else if download.Progress > 0 && download.Progress < download.FileSize-1 {
 		download.Status = InProgress
-	} else if download.Progress >= download.FileSize {
+	} else if download.Progress >= download.FileSize-1 {
 		download.Status = Completed
 	} else {
 		download.Status = Failed
