@@ -93,7 +93,6 @@ func (q *Queue) RemoveDownload(name string) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 
-	// Find and remove from this queue
 	for i, d := range q.Downloads {
 		if d.FileName == name {
 			q.Downloads = append(q.Downloads[:i], q.Downloads[i+1:]...)
@@ -240,12 +239,22 @@ func ListQueues() {
 		fmt.Println("-------------------------------")
 	}
 }
-func DeleteQueue(queueName string) {
-	if _, exists := QueuesList[queueName]; exists {
-		delete(QueuesList, queueName)
-		_ = SaveQueuesToFile()
-		fmt.Println("Queue", queueName, "deleted successfully.")
-	} else {
-		fmt.Println("Queue not found!")
+func DeleteQueue(queueName string) []Queue {
+	newDownloads := make([]*Download, 0)
+	for _, dl := range DownloadsList {
+		if dl.QueueName != queueName {
+			newDownloads = append(newDownloads, dl)
+		}
 	}
+	DownloadsList = newDownloads
+
+	delete(QueuesList, queueName)
+	_ = SaveQueuesToFile()
+	fmt.Println("Queue", queueName, "deleted successfully.")
+
+	var updatedQueues []Queue
+	for _, q := range QueuesList {
+		updatedQueues = append(updatedQueues, *q)
+	}
+	return updatedQueues
 }

@@ -23,20 +23,6 @@ type DownloadsTab struct {
 	optionsCursor int
 }
 
-func generateRandomDownloads(n int) []internal.Download {
-	downloads := make([]internal.Download, n)
-	for i := 0; i < n; i++ {
-		downloads[i] = internal.Download{
-			FileName:  fmt.Sprintf("File %d", i),
-			Status:    internal.InProgress,
-			Progress:  int64(i * 10),
-			FileSize:  int64(100),
-			StartTime: time.Now(),
-		}
-	}
-	return downloads
-}
-
 var (
 	tableSize   = 10
 	headerStyle = lipgloss.NewStyle().
@@ -70,7 +56,6 @@ func calculateTimeLeft(d internal.Download) string {
 }
 
 func getQueueName(download *internal.Download) string {
-	// Iterate over queues in sorted order by key for stability.
 	var keys []string
 	for key := range internal.QueuesList {
 		keys = append(keys, key)
@@ -104,7 +89,6 @@ func getActions(status internal.Status) []string {
 	}
 }
 func (d DownloadsTab) RenderTable() string {
-	// Define header columns including the new "Action" column.
 	columns := []string{"Filename", "Queue", "Progress", "Time Left", "Status", "Action"}
 	var headerRow []string
 	for i, col := range columns {
@@ -113,12 +97,11 @@ func (d DownloadsTab) RenderTable() string {
 	table := headerStyle.Render(strings.Join(headerRow, " ")) + "\n"
 
 	progressBar := progress.New(
-		progress.WithWidth(colWidths[2]-2), // Account for padding
+		progress.WithWidth(colWidths[2]-2),
 		progress.WithGradient("#0077BE", "#39FF14"),
 		progress.WithFillCharacters('▬', '-'),
 	)
 
-	// Render each row.
 	for i, entry := range d.downloads {
 		if i < d.pageStart || i >= d.pageStart+tableSize {
 			continue
@@ -280,31 +263,18 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case tickMsg:
-		currentMap := make(map[string]bool)
-		for _, dl := range d.downloads {
-			currentMap[dl.FileName] = true
-		}
-		var keys []string
-		for key := range internal.QueuesList {
-			keys = append(keys, key)
-		}
-		sort.Strings(keys)
-		for _, key := range keys {
-			queue := internal.QueuesList[key]
-			for _, download := range queue.Downloads {
-				found := false
-				for i, dl := range d.downloads {
-					if dl.FileName == download.FileName {
-						d.downloads[i].Progress = download.Progress
-						d.downloads[i].Status = download.Status
-						d.downloads[i].FileSize = download.FileSize
-						found = true
+		d.downloads = make([]*internal.Download, len(internal.DownloadsList))
+		copy(d.downloads, internal.DownloadsList)
+
+		for i, dl := range d.downloads {
+			if queue, exists := internal.QueuesList[dl.QueueName]; exists {
+				for _, qDL := range queue.Downloads {
+					if qDL.FileName == dl.FileName {
+						d.downloads[i].Progress = qDL.Progress
+						d.downloads[i].Status = qDL.Status
+						d.downloads[i].FileSize = qDL.FileSize
 						break
 					}
-				}
-				if !found {
-					d.downloads = append(d.downloads, download)
-					currentMap[download.FileName] = true
 				}
 			}
 		}

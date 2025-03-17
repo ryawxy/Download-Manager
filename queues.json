@@ -9,16 +9,5 @@
     "number_of_tries_limit": 0,
     "max_concurrent_downloads": 0,
     "paused": false
-  },
-  "raya": {
-    "start_time": "0000-01-01T10:20:00Z",
-    "end_time": "0001-01-01T00:00:00Z",
-    "id": "raya",
-    "downloads": [],
-    "directory": "/Users/raya/Documents/SpotPlayer",
-    "bandwidth_limit": 1000000,
-    "number_of_tries_limit": 1,
-    "max_concurrent_downloads": 2,
-    "paused": false
   }
 }

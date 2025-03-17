@@ -73,20 +73,45 @@ func (q QueuesTab) updateCurrentQueue() QueuesTab {
 	)
 	return q
 }
-
 func (q *QueuesTab) setInputs() {
+	if len(q.queues) == 0 {
+		return
+	}
 	q.inputs[0].SetValue(q.queues[q.queueCursor].Directory)
 	q.inputs[0].CursorEnd()
-	q.inputs[3].SetValue(strconv.Itoa(q.queues[q.queueCursor].MaxConcurrentDownloads))
-	q.inputs[3].CursorEnd()
-	q.inputs[2].SetValue(strconv.Itoa(q.queues[q.queueCursor].BandwidthLimit))
-	q.inputs[2].CursorEnd()
 	q.inputs[1].SetValue(strconv.Itoa(q.queues[q.queueCursor].NumberOfTriesLimit))
 	q.inputs[1].CursorEnd()
+	q.inputs[2].SetValue(strconv.Itoa(q.queues[q.queueCursor].BandwidthLimit))
+	q.inputs[2].CursorEnd()
+	q.inputs[3].SetValue(strconv.Itoa(q.queues[q.queueCursor].MaxConcurrentDownloads))
+	q.inputs[3].CursorEnd()
 	q.inputs[4].SetValue(q.queues[q.queueCursor].StartTime.Format("2006-01-02 15:04:05"))
 	q.inputs[4].CursorEnd()
 	q.inputs[5].SetValue(q.queues[q.queueCursor].EndTime.Format("2006-01-02 15:04:05"))
 	q.inputs[5].CursorEnd()
+}
+
+func (q *QueuesTab) deleteQueue() {
+	if len(q.queues) == 0 {
+		return
+	}
+	queueID := q.queues[q.queueCursor].Id
+
+	newDL := make([]*internal.Download, 0)
+	for _, dl := range internal.DownloadsList {
+		if dl.QueueName != queueID {
+			newDL = append(newDL, dl)
+		}
+	}
+	internal.DownloadsList = newDL
+
+	q.queues = internal.DeleteQueue(queueID)
+
+	// Adjust local queueCursor.
+	if q.queueCursor >= len(q.queues) {
+		q.queueCursor = max(0, len(q.queues)-1)
+	}
+	q.setInputs()
 }
 
 func (q *QueuesTab) setActive(b bool) Tab {
@@ -118,7 +143,10 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !q.creatingNewQueue {
 			switch msg.String() {
 			case "up":
-				if !q.controlContent {
+				if q.buttonsCursor != -1 {
+					q.buttonsCursor = -1
+					q.contentCursor = len(q.inputs) - 1
+				} else if !q.controlContent {
 					q.queueCursor = (q.queueCursor + len(q.queues) - 1) % len(q.queues)
 					q.setInputs()
 				} else if q.contentCursor > 0 {
@@ -130,11 +158,20 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					q.setInputs()
 				} else if q.contentCursor < len(q.inputs)-1 {
 					q.contentCursor++
+				} else {
+					q.buttonsCursor = 0
 				}
 			case "right":
-				q.controlContent = true
+				if q.buttonsCursor == -1 {
+					q.controlContent = true
+				} else {
+					q.buttonsCursor = 0
+				}
 			case "left":
-				if q.controlContent {
+				if q.buttonsCursor != -1 {
+					q.buttonsCursor = -1
+					q.contentCursor = len(q.inputs) - 1
+				} else if q.controlContent {
 					q.controlContent = false
 					q.contentCursor = -1
 				} else {
@@ -148,7 +185,11 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				q.contentCursor = 0
 				q.buttonsCursor = -1
 			case "enter":
-				if q.controlContent {
+				if q.buttonsCursor != -1 {
+					// Delete button is selected.
+					q.deleteQueue()
+					q.buttonsCursor = -1
+				} else if q.controlContent {
 					q.inputs[q.contentCursor], _ = q.inputs[q.contentCursor].Update(msg)
 					q.updateCurrentQueue()
 				}
@@ -159,6 +200,7 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		} else {
+			// Creation mode (unchanged).
 			switch msg.String() {
 			case "up":
 				if q.contentCursor > 0 {
@@ -280,7 +322,15 @@ func (q *QueuesTab) View() string {
 			queueContent += style.Render(label+": "+q.inputs[i].View()) + "\n"
 		}
 	}
-	footer := "Press 'n' for New Queue | '→' to edit fields | '←' to go back | '↑/↓' to navigate"
+	deleteButton := "[Delete]"
+	if q.buttonsCursor != -1 {
+		deleteButton = selectedStyle.Render(deleteButton)
+	} else {
+		deleteButton = style.Render(deleteButton)
+	}
+	queueContent += "\n" + deleteButton + "\n"
+
+	footer := "Press 'n' for New Queue | '→' to edit fields | '←' to go back | '↑/↓' to navigate | 'Enter' to select"
 	return lipgloss.JoinHorizontal(lipgloss.Top, queueList, "   ", queueContent) + "\n" + footer
 }
 
