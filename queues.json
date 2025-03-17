@@ -1,12 +1,64 @@
 {
   "a": {
-    "start_time": "2025-03-12T23:19:00+03:30",
-    "end_time": "2025-03-12T23:59:00+03:30",
+    "start_time": "2025-03-12T19:49:00Z",
+    "end_time": "2025-03-12T20:29:00Z",
     "id": "a",
     "downloads": [
       {
         "URL": "http://math.sharif.ir/faculties/uploads/daneshgar/Lectures/Daneshkade-Meydan-1402-9-28.pdf",
         "FileName": "",
+        "FileSize": 0,
+        "status": "pending",
+        "progress": 0,
+        "total_bytes": 0,
+        "StartTime": "0001-01-01T00:00:00Z",
+        "manager": null,
+        "Paused": false,
+        "downloaded_bytes": 0,
+        "directory": "/Users/raya/Documents/second-semester"
+      },
+      {
+        "URL": "http://ocw.sharif.edu/uploads/91622a23231c299d6b7d884f4bc38c38.mp4",
+        "FileName": "bahar",
+        "FileSize": 0,
+        "status": "pending",
+        "progress": 0,
+        "total_bytes": 0,
+        "StartTime": "0001-01-01T00:00:00Z",
+        "manager": null,
+        "Paused": false,
+        "downloaded_bytes": 0,
+        "directory": "/Users/raya/Documents/second-semester"
+      },
+      {
+        "URL": "http://ocw.sharif.edu/uploads/91622a23231c299d6b7d884f4bc38c38.mp4",
+        "FileName": "downloads",
+        "FileSize": 0,
+        "status": "pending",
+        "progress": 0,
+        "total_bytes": 0,
+        "StartTime": "0001-01-01T00:00:00Z",
+        "manager": null,
+        "Paused": false,
+        "downloaded_bytes": 0,
+        "directory": "/Users/raya/Documents/second-semester"
+      },
+      {
+        "URL": "http://ocw.sharif.edu/uploads/91622a23231c299d6b7d884f4bc38c38.mp4",
+        "FileName": "bahar",
+        "FileSize": 0,
+        "status": "pending",
+        "progress": 0,
+        "total_bytes": 0,
+        "StartTime": "0001-01-01T00:00:00Z",
+        "manager": null,
+        "Paused": false,
+        "downloaded_bytes": 0,
+        "directory": "/Users/raya/Documents/second-semester"
+      },
+      {
+        "URL": "http://ocw.sharif.edu/uploads/91622a23231c299d6b7d884f4bc38c38.mp4",
+        "FileName": "boooo",
         "FileSize": 0,
         "status": "pending",
         "progress": 0,

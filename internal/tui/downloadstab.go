@@ -20,21 +20,6 @@ type DownloadsTab struct {
 	optionsCursor int
 }
 
-// Generate sample downloads
-func generateRandomDownloads(n int) []internal.Download {
-	downloads := make([]internal.Download, n)
-	for i := 0; i < n; i++ {
-		downloads[i] = internal.Download{
-			FileName:   fmt.Sprintf("File %d", i),
-			Status:     internal.Status(internal.InProgress),
-			Progress:   int64(i * 10),
-			TotalBytes: int64(100),
-			StartTime:  time.Now(),
-		}
-	}
-	return downloads
-}
-
 // Styles
 var (
 	tableSize   = 10
@@ -59,9 +44,7 @@ var (
 
 // NewDownloadsTab initializes the tab
 func NewDownloadsTab() DownloadsTab {
-	d := generateRandomDownloads(20)
-
-	return DownloadsTab{downloads: d, cursor: -1, pageStart: 0}
+	return DownloadsTab{cursor: -1, pageStart: 0}
 }
 
 // calculateTimeLeft estimates time left for a download
@@ -214,7 +197,7 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	} else if d.pageStart+tableSize <= d.cursor {
 		d.pageStart = d.cursor - tableSize + 1
 	}
-	return d, nil
+	return d, tickCmd()
 }
 
 // View renders the table

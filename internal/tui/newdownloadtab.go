@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"IDM/internal"
+	"fmt"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -67,8 +69,43 @@ func (n NewDownloadTab) Init() tea.Cmd {
 	return nil
 }
 
-func (n NewDownloadTab) newDownload() {
+func (n *NewDownloadTab) newDownload() error {
+	url := n.url.Value()
+	queueID := n.queue.Value()
+	fileName := n.saveAs.Value()
 
+	if url == "" {
+		n.errorMsg = "URL cannot be empty"
+		return fmt.Errorf(n.errorMsg)
+	}
+	if queueID == "" {
+		n.errorMsg = "Queue cannot be empty"
+		return fmt.Errorf(n.errorMsg)
+	}
+	if fileName == "" {
+		n.errorMsg = "File name cannot be empty"
+		return fmt.Errorf(n.errorMsg)
+	}
+
+	queue := internal.GetQueue(queueID)
+	if queue == nil {
+		n.errorMsg = fmt.Sprintf("Queue %s not found", queueID)
+		return fmt.Errorf(n.errorMsg)
+	}
+
+	// Create new download instance
+	download := internal.NewDownload(url, fileName, queue.Directory)
+	err := queue.AddDownload(download)
+	if err != nil {
+		n.errorMsg = fmt.Sprintf("Failed to add download: %v", err)
+		return err
+	}
+
+	n.url.SetValue("")
+	n.queue.SetValue("")
+	n.saveAs.SetValue("")
+	n.errorMsg = "Download added to queue"
+	return nil
 }
 
 func (n NewDownloadTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -107,7 +144,9 @@ func (n NewDownloadTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		n.saveAs, cmd = n.saveAs.Update(msg)
 		n.saveAs.Focus()
 	}
-
+	if cmd == nil {
+		return n, tickCmd()
+	}
 	return n, cmd
 }
 

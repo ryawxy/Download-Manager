@@ -25,3 +25,14 @@ type Download struct {
 	DownloadedBytes int64  `json:"downloaded_bytes"`
 	Directory       string `json:"directory"`
 }
+
+func NewDownload(url, fileName, directory string) *Download {
+	return &Download{
+		URL:       url,
+		FileName:  fileName,
+		FileSize:  0,
+		Status:    Pending,
+		Progress:  0,
+		Directory: directory,
+	}
+}

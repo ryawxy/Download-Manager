@@ -3,6 +3,7 @@ package tui
 //todo update README.md
 
 import (
+	"IDM/internal"
 	"fmt"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -65,6 +66,7 @@ func (m MainStage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
+			internal.GracefulShutdown()
 			return m, tea.Quit
 		}
 	case tea.WindowSizeMsg: // Handles terminal resizing

@@ -75,10 +75,6 @@ func (download *Download) getFileNameFromURL() string {
 	return filename
 }
 
-/*
-http.Head() sends a HEAD request to server,
-and returns headResponse only (not file content)
-*/
 func (download *Download) GetFileSizeAndName() error {
 	headResp, err := http.Head(download.URL)
 	if err != nil {
@@ -168,7 +164,6 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 		download.DownloadedBytes += int64(n)
 		download.Manager.Mutex.Unlock()
 
-		download.ShowProgress()
 	}
 }
 func (download *Download) StartDownload() error {
@@ -271,14 +266,9 @@ func (download *Download) retry() {
 	fmt.Println("Retry successful:", download.FileName)
 }
 
-func (download *Download) ShowProgress() {
+func (download *Download) getProgress() float64 {
 	download.Manager.Mutex.Lock()
 	defer download.Manager.Mutex.Unlock()
 
-	percentage := float64(download.DownloadedBytes) / float64(download.FileSize) * 100
-	barLength := 30
-	filled := int(percentage / 100 * float64(barLength))
-	bar := strings.Repeat("█", filled) + strings.Repeat("-", barLength-filled)
-
-	fmt.Printf("\rDownloading: [%s] %.2f%%", bar, percentage)
+	return float64(download.DownloadedBytes) / float64(download.FileSize) * 100
 }

@@ -162,6 +162,7 @@ func (q QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, queue := range internal.QueuesList {
 			q.queues = append(q.queues, *queue)
 		}
+		q.queues = append(q.queues, getNewQueue())
 		return q, tickCmd()
 	}
 	var cmd tea.Cmd
@@ -169,7 +170,9 @@ func (q QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		q.inputs[q.contentCursor], _ = q.inputs[q.contentCursor].Update(msg)
 		q.updateCurrentQueue()
 	}
-
+	if cmd == nil {
+		return q, tickCmd()
+	}
 	return q, cmd
 }
 

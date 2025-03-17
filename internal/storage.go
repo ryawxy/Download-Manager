@@ -26,7 +26,6 @@ func SaveQueuesToFile() error {
 		return err
 	}
 
-	fmt.Println("Queues saved successfully.")
 	return nil
 }
 func LoadQueuesFromFile() error {
@@ -53,7 +52,6 @@ func LoadQueuesFromFile() error {
 		q.TokenBucket = NewTokenBucket(q.BandwidthLimit, rate)
 	}
 
-	fmt.Println("Queues loaded successfully.")
 	return nil
 }
 func (q *Queue) MarshalJSON() ([]byte, error) {

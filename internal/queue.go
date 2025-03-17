@@ -196,6 +196,12 @@ func (q *Queue) ResumeQueue() {
 	go StartQueueDownloads(q) // starting again
 }
 
+func GetQueue(id string) *Queue {
+	if q, exists := QueuesList[id]; exists {
+		return q
+	}
+	return nil
+}
 func ScheduleQueueDownloads(q *Queue) {
 	now := time.Now()
 	delay := q.StartTime.Sub(now)
