@@ -149,7 +149,7 @@ func StartQueueDownloads(q *Queue) {
 			}
 			q.mutex.Unlock()
 
-			d.NewDownloadManager(4, tb)
+			d.NewDownloadManager(Workers, tb)
 			d.Manager.Ctx = ctx
 
 			d.Directory = dir

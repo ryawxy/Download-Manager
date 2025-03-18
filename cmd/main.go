@@ -2,7 +2,6 @@ package main
 
 import (
 	"IDM/internal"
-	"IDM/internal/tui"
 	"bufio"
 	"fmt"
 	"os"
@@ -20,8 +19,8 @@ func init() {
 }
 
 func main() {
-	tui.Start()
-	//cliMain()
+	//tui.Start()
+	cliMain()
 }
 func cliMain() {
 	err := internal.LoadQueuesFromFile()
@@ -127,11 +126,11 @@ func cliMain() {
 	}
 	fmt.Println("Downloads assigned to queue:", queueName)
 	for {
-		fmt.Print("Enter command (start <queue_name> / pause <queue_name> / resume <queue_name> / list / exit): ")
+		fmt.Print("Enter command (start <queue_name> / pause <queue_name> / resume <queue_name> / retry <queue_name> <filename> / list / exit): ")
 		command, _ := reader.ReadString('\n')
 		command = strings.TrimSpace(command)
 
-		parts := strings.SplitN(command, " ", 2)
+		parts := strings.SplitN(command, " ", 3)
 		if len(parts) == 2 {
 			qName := parts[1]
 			if q, ok := internal.QueuesList[qName]; ok {
@@ -141,6 +140,20 @@ func cliMain() {
 					q.ResumeQueue()
 				} else if parts[0] == "start" {
 					internal.ScheduleQueueDownloads(q)
+				} else if parts[0] == "retry" {
+					if len(parts) != 3 {
+						fmt.Println("Usage: retry <queue_name> <filename>")
+						continue
+					}
+					filename := parts[2]
+					for _, d := range q.Downloads {
+						if d.FileName == filename {
+							if err := d.Retry(q); err != nil {
+								fmt.Println("Retry error:", err)
+							}
+							break
+						}
+					}
 				}
 			} else {
 				fmt.Println("Queue not found!")

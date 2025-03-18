@@ -15,6 +15,8 @@ import (
 	"time"
 )
 
+var Workers = 3
+
 type DownloadManager struct {
 	ChunkSize   int64 `json:"chunkSize"` // size that each worker process
 	Workers     int
@@ -203,7 +205,6 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 	}
 }
 func (download *Download) StartDownload() error {
-
 	if !download.CheckRangeSupport() {
 		fmt.Println("Server does NOT support partial downloads. Switching to single-threaded mode...")
 		download.Manager.Workers = 1
@@ -311,24 +312,45 @@ func (dm *DownloadManager) deleteFromQueue(download *Download, queue *Queue) {
 	//TODO
 }
 
-func (download *Download) Retry() {
+func (download *Download) Retry(queue *Queue) error {
 	if download.Status != Failed {
-		fmt.Println("Retry not allowed, download isn't in failed status")
-		return
+		return fmt.Errorf("retry not allowed, download status is: %s\n", download.Status)
 	}
 
-	fmt.Printf("Retrying download: %s\n", download.FileName)
+	download.Manager.Mutex.Lock()
+	attempts := 0
+	for _, d := range queue.Downloads {
+		if d.FileName == download.FileName {
+			attempts++
+		}
+	}
+	if attempts >= queue.NumberOfTriesLimit {
+		download.Manager.Mutex.Unlock()
+		return fmt.Errorf("retry limit (%d) exceeded for %s\n", queue.NumberOfTriesLimit, download.FileName)
+	}
+	download.Manager.Mutex.Unlock()
+
+	fmt.Printf("retrying download: %s (Attempt %d/%d) \n", download.FileName, attempts+1, queue.NumberOfTriesLimit)
 	download.Status = InProgress
+	download.DownloadedBytes = 0
+	download.Progress = 0
+
+	// this is just for cleaning up old parts (which failed before)
+	for i := 0; i < download.Manager.Workers; i++ {
+		partPath := filepath.Join(download.Directory, fmt.Sprintf("%s.part%d", download.FileName, i))
+		os.Remove(partPath)
+	}
 
 	err := download.StartDownload()
 	if err != nil {
-		fmt.Println("Retry failed:", err)
 		download.Status = Failed
-		return
+		fmt.Printf("retry failed for %s: %v\n", download.FileName, err)
+		return err
 	}
 
 	download.Status = Completed
-	fmt.Println("Retry successful:", download.FileName)
+	fmt.Printf("Retry successful for: %s\n", download.FileName)
+	return nil
 }
 
 func (download *Download) PauseDownload() {
@@ -356,7 +378,6 @@ func (download *Download) CheckRangeSupport() bool {
 		fmt.Println("Error creating HEAD request:", err)
 		return false
 	}
-
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		fmt.Println("Error sending HEAD request:", err)
@@ -364,8 +385,7 @@ func (download *Download) CheckRangeSupport() bool {
 	}
 	defer resp.Body.Close()
 
-	acceptRanges := resp.Header.Get("Accept-Ranges")
-	return resp.StatusCode == http.StatusPartialContent && acceptRanges == "bytes"
+	return resp.Header.Get("Accept-Ranges") == "bytes"
 }
 
 func (download *Download) ShowProgress() {
