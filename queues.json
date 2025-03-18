@@ -1,0 +1,61 @@
+{
+  "Default": {
+    "start_time": "0001-01-01T00:00:00Z",
+    "end_time": "0001-01-01T00:00:00Z",
+    "id": "Default",
+    "downloads": null,
+    "directory": "",
+    "bandwidth_limit": 1000000,
+    "number_of_tries_limit": 0,
+    "max_concurrent_downloads": 0,
+    "paused": false
+  },
+  "r": {
+    "start_time": "2025-03-18T14:55:00+03:30",
+    "end_time": "2025-03-18T17:38:00+03:30",
+    "id": "r",
+    "downloads": [
+      {
+        "URL": "https://ensani.ir/file/download/article/20160216093124-10017-18.pdf",
+        "FileName": "20160216093124-10017-18.pdf",
+        "FileSize": 305954,
+        "status": "completed",
+        "progress": 100,
+        "StartTime": "2025-03-18T14:55:37.322648+03:30",
+        "Paused": false,
+        "downloaded_bytes": 305954,
+        "directory": "/Users/raya/Documents/second-semester",
+        "queue_name": "r"
+      },
+      {
+        "URL": "https://www.cs.toronto.edu/~nisarg/tutorials/distortion-tutorial.pdf",
+        "FileName": "distortion-tutorial.pdf",
+        "FileSize": 4044419,
+        "status": "completed",
+        "progress": 300,
+        "StartTime": "2025-03-18T14:56:59.154779+03:30",
+        "Paused": false,
+        "downloaded_bytes": 12133257,
+        "directory": "/Users/raya/Documents/second-semester",
+        "queue_name": "r"
+      },
+      {
+        "URL": "https://www.cs.toronto.edu/~nisarg/tutorials/distortion-tutorial.pdf",
+        "FileName": "distortion-tutorial.pdf",
+        "FileSize": 4044419,
+        "status": "completed",
+        "progress": 291,
+        "StartTime": "0001-01-01T00:00:00Z",
+        "Paused": false,
+        "downloaded_bytes": 0,
+        "directory": "/Users/raya/Documents/second-semester",
+        "queue_name": "r"
+      }
+    ],
+    "directory": "/Users/raya/Documents/second-semester",
+    "bandwidth_limit": 100000,
+    "number_of_tries_limit": 2,
+    "max_concurrent_downloads": 3,
+    "paused": false
+  }
+}

@@ -47,10 +47,18 @@ func NewDownloadsTab() DownloadsTab {
 
 func calculateTimeLeft(d internal.Download) string {
 	if d.Status == internal.InProgress && d.Progress > 0 {
+		downloaded := float64(d.FileSize) * (float64(d.Progress) / 100.0)
 		elapsed := time.Since(d.StartTime).Seconds()
-		total := float64(d.FileSize) / float64(d.Progress) * 100
-		remaining := total - elapsed
-		return fmt.Sprintf("%.0fs", remaining)
+		if elapsed == 0 {
+			return "N/A"
+		}
+		rate := downloaded / elapsed
+		if rate <= 0 {
+			return "N/A"
+		}
+		remainingBytes := float64(d.FileSize) - downloaded
+		remainingSeconds := remainingBytes / rate
+		return fmt.Sprintf("%.0fs", remainingSeconds)
 	}
 	return "N/A"
 }
@@ -83,9 +91,9 @@ func getActions(status internal.Status) []string {
 	case internal.InProgress:
 		return []string{"Pause", "Cancel", "Delete"}
 	case internal.Pending:
-		return []string{"Start", "Delete"}
+		return []string{"Start", "Delete", "Cancel"}
 	default:
-		return []string{"Start", "Delete"}
+		return []string{"Start", "Delete", "Cancel"}
 	}
 }
 func (d DownloadsTab) RenderTable() string {

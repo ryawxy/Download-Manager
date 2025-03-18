@@ -204,6 +204,7 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 }
 func (download *Download) StartDownload() error {
 
+	download.StartTime = time.Now()
 	if !download.CheckRangeSupport() {
 		fmt.Println("Server does NOT support partial downloads. Switching to single-threaded mode...")
 		download.Manager.Workers = 1
@@ -296,9 +297,9 @@ func (download *Download) changeDownloadStatus() {
 
 	if download.Progress == 0 {
 		download.Status = Pending
-	} else if download.Progress > 0 && download.Progress < download.FileSize-1 {
+	} else if download.Progress > 0 && download.DownloadedBytes < download.FileSize {
 		download.Status = InProgress
-	} else if download.Progress >= download.FileSize-1 {
+	} else if download.DownloadedBytes >= download.FileSize {
 		download.Status = Completed
 	} else {
 		download.Status = Failed
@@ -339,13 +340,11 @@ func (download *Download) PauseDownload() {
 	fmt.Printf("Paused download: %s\n", download.FileName)
 }
 
-// ResumeDownload resumes a paused download.
 func (download *Download) ResumeDownload() {
 	download.Manager.Mutex.Lock()
 	defer download.Manager.Mutex.Unlock()
 	download.Paused = false
 	download.Status = InProgress
-	// For simplicity, re-start the download. In a real app, resume logic would be more complex.
 	go download.StartDownload()
 	fmt.Printf("Resumed download: %s\n", download.FileName)
 }

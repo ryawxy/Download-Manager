@@ -57,6 +57,11 @@ func LoadQueuesFromFile() error {
 		q.TokenBucket = NewTokenBucket(q.BandwidthLimit, rate)
 
 	}
+	for _, q := range QueuesList {
+		for _, d := range q.Downloads {
+			DownloadsList = append(DownloadsList, d)
+		}
+	}
 
 	//fmt.Println("Queues loaded successfully.")
 	return nil

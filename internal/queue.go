@@ -207,7 +207,7 @@ func (q *Queue) ResumeQueue() {
 
 	q.Paused = false
 	fmt.Printf("Queue %s resumed successfully\n", q.Id)
-	go StartQueueDownloads(q) // starting again
+	go StartQueueDownloads(q)
 }
 
 func ScheduleQueueDownloads(q *Queue) {

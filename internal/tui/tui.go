@@ -1,7 +1,5 @@
 package tui
 
-//todo update README.md
-
 import (
 	"IDM/internal"
 	"fmt"
@@ -24,10 +22,6 @@ type MainStage struct {
 	tabs          []Tab
 	height, width int
 }
-
-const newDownloadTabId = 0
-const queuesTabId = 2
-const downloadsTabId = 1
 
 func NewMainStage() MainStage {
 	return MainStage{
