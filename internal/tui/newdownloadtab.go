@@ -17,11 +17,13 @@ var (
 )
 
 type NewDownloadTab struct {
-	url, queue, saveAs textinput.Model
-	cursor             int
-	isActive           bool
-	errorMsg           string
-	successMsg         string
+	url, queue, saveAs, name textinput.Model
+	cursor                   int
+	isActive                 bool
+	errorMsg                 string
+	successMsg               string
+	buttonMode               bool
+	buttonIndex              int
 }
 
 func NewNewDownloadTab() NewDownloadTab {
@@ -36,14 +38,19 @@ func NewNewDownloadTab() NewDownloadTab {
 	n.queue.Prompt = ""
 
 	n.saveAs = textinput.New()
-	n.saveAs.Placeholder = "Enter Filename"
+	n.saveAs.Placeholder = "Enter Local Path"
 	n.saveAs.Prompt = ""
 
-	n.cursor = -1
+	n.name = textinput.New()
+	n.name.Placeholder = "Enter Desired Name"
+	n.name.Prompt = ""
+
+	n.cursor = 0
 	n.isActive = false
 	n.errorMsg = ""
 	n.successMsg = ""
-
+	n.buttonMode = false
+	n.buttonIndex = 0
 	return n
 }
 
@@ -51,8 +58,12 @@ func (n NewDownloadTab) setActive(b bool) Tab {
 	n.isActive = b
 	if b {
 		n.cursor = 0
+		n.buttonMode = false
+		n.buttonIndex = 0
 	} else {
 		n.cursor = -1
+		n.buttonMode = false
+		n.buttonIndex = 0
 	}
 	return n
 }
@@ -69,12 +80,16 @@ func (n NewDownloadTab) Init() tea.Cmd {
 	n.queue.Placeholder = "Enter Queue Name"
 
 	n.saveAs = textinput.New()
-	n.saveAs.Placeholder = "Enter Filename"
+	n.saveAs.Placeholder = "Enter Local Path"
 
-	n.cursor = -1
+	n.name = textinput.New()
+	n.name.Placeholder = "Enter Desired Name"
+
+	n.cursor = 0
 	n.errorMsg = ""
 	n.successMsg = ""
-
+	n.buttonMode = false
+	n.buttonIndex = 0
 	return nil
 }
 
@@ -82,6 +97,7 @@ func (n *NewDownloadTab) newDownload() {
 	url := strings.TrimSpace(n.url.Value())
 	queueName := strings.TrimSpace(n.queue.Value())
 	saveAs := strings.TrimSpace(n.saveAs.Value())
+	name := strings.TrimSpace(n.name.Value())
 
 	if url == "" || queueName == "" {
 		n.errorMsg = "All fields must be filled!"
@@ -110,12 +126,17 @@ func (n *NewDownloadTab) newDownload() {
 		Directory: saveAs,
 		QueueName: queueName,
 		Status:    "Pending",
+		FileName:  name,
 	}
 	newDownload.NewDownloadManager(internal.WORKERS, selectedQueue.TokenBucket)
+
 	err := newDownload.GetFileSizeAndName()
 	if err != nil {
 		n.errorMsg = "Invalid URL or unreachable resource"
 		return
+	}
+	if name != "" {
+		newDownload.FileName = name
 	}
 
 	err = selectedQueue.AddDownload(&newDownload)
@@ -129,84 +150,137 @@ func (n *NewDownloadTab) newDownload() {
 
 	n.successMsg = fmt.Sprintf("Added '%s' to queue '%s'", newDownload.FileName, queueName)
 	n.errorMsg = ""
-
-	n.url.SetValue("")
-	n.queue.SetValue("")
-	n.saveAs.SetValue("")
-	n.cursor = 0
-	n.successMsg = ""
-	n.errorMsg = ""
 }
 
 func (n NewDownloadTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		if n.buttonMode {
+			switch msg.String() {
+			case "left":
+				if n.buttonIndex > 0 {
+					n.buttonIndex--
+				}
+			case "right":
+				if n.buttonIndex < 1 {
+					n.buttonIndex++
+				}
+			case "up":
+				n.buttonMode = false
+				n.buttonIndex = 0
+				n.cursor = 3
+			case "enter":
+				if n.buttonIndex == 0 {
+					n.newDownload()
+					n.url.SetValue("")
+					n.queue.SetValue("")
+					n.saveAs.SetValue("")
+					n.name.SetValue("")
+					n.errorMsg = ""
+					n.successMsg = ""
+				} else {
+					n.url.SetValue("")
+					n.queue.SetValue("")
+					n.saveAs.SetValue("")
+					n.name.SetValue("")
+					n.errorMsg = ""
+					n.successMsg = ""
+				}
+				n.buttonMode = false
+				n.buttonIndex = 0
+				n.cursor = 0
+			}
+			return n, nil
+		}
 		switch msg.String() {
 		case "up":
 			if n.cursor > 0 {
 				n.cursor--
 			} else {
-				n.cursor = 2
+				n.cursor = 3
 			}
 		case "down":
-			if n.cursor < 2 {
+			if n.cursor < 3 {
 				n.cursor++
 			} else {
-				n.cursor = 0
+				n.buttonMode = true
+				n.buttonIndex = 0
 			}
 		case "left":
 			n.isActive = false
 			n.cursor = -1
 		case "enter":
 			n.newDownload()
+		default:
+			switch n.cursor {
+			case 0:
+				n.url, _ = n.url.Update(msg)
+				n.url.Focus()
+			case 1:
+				n.queue, _ = n.queue.Update(msg)
+				n.queue.Focus()
+			case 2:
+				n.saveAs, _ = n.saveAs.Update(msg)
+				n.saveAs.Focus()
+			case 3:
+				n.name, _ = n.name.Update(msg)
+				n.name.Focus()
+			}
 		}
 	}
-
-	var cmd tea.Cmd
-	switch n.cursor {
-	case 0:
-		n.url, cmd = n.url.Update(msg)
-		n.url.Focus()
-	case 1:
-		n.queue, cmd = n.queue.Update(msg)
-		n.queue.Focus()
-	case 2:
-		n.saveAs, cmd = n.saveAs.Update(msg)
-		n.saveAs.Focus()
-	}
-
-	return n, cmd
+	return n, nil
 }
 
 func (n NewDownloadTab) View() string {
 	urlView := n.url.View()
 	queueView := n.queue.View()
 	saveAsView := n.saveAs.View()
+	nameView := n.name.View()
 
-	if n.cursor == 0 {
+	if n.cursor == 0 && !n.buttonMode {
 		urlView = selectedInputStyle.Render("URL: " + urlView)
 	} else {
 		urlView = unselectedInputStyle.Render("URL: " + urlView)
 	}
-
-	if n.cursor == 1 {
+	if n.cursor == 1 && !n.buttonMode {
 		queueView = selectedInputStyle.Render("Queue: " + queueView)
 	} else {
 		queueView = unselectedInputStyle.Render("Queue: " + queueView)
 	}
-
-	if n.cursor == 2 {
+	if n.cursor == 2 && !n.buttonMode {
 		saveAsView = selectedInputStyle.Render("Save as: " + saveAsView)
 	} else {
 		saveAsView = unselectedInputStyle.Render("Save as: " + saveAsView)
+	}
+	if n.cursor == 3 && !n.buttonMode {
+		nameView = selectedInputStyle.Render("Name: " + nameView)
+	} else {
+		nameView = unselectedInputStyle.Render("Name: " + nameView)
 	}
 
 	errMsg := errorStyle.Render(n.errorMsg)
 	successMsg := successStyle.Render(n.successMsg)
 
-	return lipgloss.JoinVertical(lipgloss.Top,
-		urlView, queueView, saveAsView, errMsg, successMsg,
-	)
+	fields := lipgloss.JoinVertical(lipgloss.Top, urlView, queueView, saveAsView, nameView)
+	var layout string
+	var createButton, cancelButton string
+	if n.buttonMode {
+		if n.buttonIndex == 0 {
+			createButton = selectedInputStyle.Render("[Create]")
+			cancelButton = unselectedInputStyle.Render("[Cancel]")
+		} else {
+			createButton = unselectedInputStyle.Render("[Create]")
+			cancelButton = selectedInputStyle.Render("[Cancel]")
+		}
+		buttons := lipgloss.JoinHorizontal(lipgloss.Center, createButton, "   ", cancelButton)
+		layout = lipgloss.JoinVertical(lipgloss.Top, fields, buttons, errMsg, successMsg)
+	} else {
+		createButton = unselectedInputStyle.Render("[Create]")
+		cancelButton = unselectedInputStyle.Render("[Cancel]")
+		buttons := lipgloss.JoinHorizontal(lipgloss.Center, createButton, "   ", cancelButton)
+		layout = lipgloss.JoinVertical(lipgloss.Top, fields, buttons, errMsg, successMsg)
+	}
+	return layout
 }
 
 func (n NewDownloadTab) toString() string {
@@ -214,5 +288,5 @@ func (n NewDownloadTab) toString() string {
 }
 
 func (n NewDownloadTab) getFooter() string {
-	return "Use '↑ / ↓' to navigate, Press Enter to add download"
+	return "Use '↑/↓' to navigate fields. When on the last field, press down to select buttons; use left/right to choose and Enter to execute."
 }

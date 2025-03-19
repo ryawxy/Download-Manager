@@ -16,7 +16,7 @@ import (
 )
 
 type DownloadManager struct {
-	ChunkSize   int64 `json:"chunkSize"` // size that each worker process
+	ChunkSize   int64 `json:"chunkSize"`
 	Workers     int
 	Cancel      context.CancelFunc
 	Ctx         context.Context
