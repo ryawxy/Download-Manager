@@ -127,11 +127,11 @@ func cliMain() {
 	}
 	fmt.Println("Downloads assigned to queue:", queueName)
 	for {
-		fmt.Print("Enter command (start <queue_name> / pause <queue_name> / resume <queue_name> / list / exit): ")
+		fmt.Print("Enter command (start <queue_name> / pause <queue_name> / resume <queue_name> / retry <queue_name> <filename> / list / exit): ")
 		command, _ := reader.ReadString('\n')
 		command = strings.TrimSpace(command)
 
-		parts := strings.SplitN(command, " ", 2)
+		parts := strings.SplitN(command, " ", 3)
 		if len(parts) == 2 {
 			qName := parts[1]
 			if q, ok := internal.QueuesList[qName]; ok {

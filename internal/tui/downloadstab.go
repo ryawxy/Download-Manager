@@ -237,7 +237,7 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					case "Cancel":
 						go d.downloads[d.cursor].CancelDownload()
 					case "Retry":
-						go d.downloads[d.cursor].Retry()
+						//go d.downloads[d.cursor].Retry()
 					case "Delete":
 						selectedDL := d.downloads[d.cursor]
 						if queue, exists := internal.QueuesList[selectedDL.QueueName]; exists {
