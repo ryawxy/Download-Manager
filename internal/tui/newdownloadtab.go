@@ -111,7 +111,7 @@ func (n *NewDownloadTab) newDownload() {
 		QueueName: queueName,
 		Status:    "Pending",
 	}
-	newDownload.NewDownloadManager(4, selectedQueue.TokenBucket)
+	newDownload.NewDownloadManager(internal.WORKERS, selectedQueue.TokenBucket)
 	err := newDownload.GetFileSizeAndName()
 	if err != nil {
 		n.errorMsg = "Invalid URL or unreachable resource"

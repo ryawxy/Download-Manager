@@ -104,8 +104,8 @@ var (
 	selectedTabStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("48")).Background(lipgloss.Color("")).Bold(true)
 	unselectedTabStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Background(lipgloss.Color(""))
 	footerStyle        = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("240")). // Dark gray color
-				Background(lipgloss.Color("")).    // Black background
+				Foreground(lipgloss.Color("240")).
+				Background(lipgloss.Color("")).
 				Padding(0, 1)
 )
 

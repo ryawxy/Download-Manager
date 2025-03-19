@@ -38,7 +38,6 @@ func (tb *TokenBucket) WaitAndTake(tokens int) {
 	defer tb.mu.Unlock()
 
 	for tb.tokens < tokens {
-		// Calculate how long to wait for the needed tokens
 		needed := tokens - tb.tokens
 		waitTime := time.Duration(needed) * tb.rate
 
@@ -49,11 +48,4 @@ func (tb *TokenBucket) WaitAndTake(tokens int) {
 	}
 
 	tb.tokens -= tokens
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

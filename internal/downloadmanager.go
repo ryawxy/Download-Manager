@@ -16,7 +16,7 @@ import (
 )
 
 type DownloadManager struct {
-	ChunkSize   int64 `json:"chunkSize"` // size that each worker process
+	ChunkSize   int64 `json:"chunkSize"`
 	Workers     int
 	Cancel      context.CancelFunc
 	Ctx         context.Context
@@ -26,6 +26,8 @@ type DownloadManager struct {
 type ProgressMsg struct {
 	Download *Download
 }
+
+var WORKERS = 6
 
 func (download *Download) NewDownloadManager(workers int, tb *TokenBucket) *DownloadManager {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -44,7 +46,6 @@ func getFileNameFromHeader(resp *http.Response) (string, bool) {
 		return "", false // it means server didn't send any contentDisp
 	}
 
-	// it returns the media type automatically!
 	_, params, err := mime.ParseMediaType(contentDisp)
 	if err != nil {
 		return "", false
@@ -85,7 +86,7 @@ func (download *Download) GetFileSizeAndName() error {
 		return fmt.Errorf("failed to get file info: server returned %d - %s", headResp.StatusCode, headResp.Status)
 	}
 
-	download.FileSize = headResp.ContentLength // converting response to int!
+	download.FileSize = headResp.ContentLength
 	download.Manager.ChunkSize = download.FileSize / int64(download.Manager.Workers)
 
 	if filename, ok := getFileNameFromHeader(headResp); ok {
@@ -97,10 +98,10 @@ func (download *Download) GetFileSizeAndName() error {
 
 	return nil
 }
-
 func (download *Download) downloadChunk(start int64, end int64, partNum int, wg *sync.WaitGroup) {
 	defer wg.Done()
 
+	download.StartTime = time.Now()
 	req, err := http.NewRequestWithContext(download.Manager.Ctx, "GET", download.URL, nil)
 	if err != nil {
 		fmt.Println("Error creating request:", err)
@@ -117,7 +118,6 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 	encoding := resp.Header.Get("Content-Encoding")
 	if encoding == "gzip" {
 		fmt.Println("Warning: Server is compressing the response, decoding needed!")
-		// Decompress manually using gzip.Reader
 	}
 
 	defer resp.Body.Close()
@@ -128,9 +128,7 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 
 	partFileName := fmt.Sprintf("%s.part%d", download.FileName, partNum)
 	fullPath := filepath.Join(download.Directory, partFileName)
-	//file, err := os.Create(fullPath)
 	file, err := os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY, 0644)
-
 	if err != nil {
 		fmt.Println("Error creating part file:", err)
 		return
@@ -156,49 +154,49 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 		download.Manager.Mutex.Unlock()
 
 		n, err := resp.Body.Read(buf)
+		if n > 0 {
+			remaining := end - start + 1 - totalBytesRead
+			if int64(n) > remaining {
+				n = int(remaining)
+			}
+
+			if download.Manager.TokenBucket != nil {
+				download.Manager.TokenBucket.WaitAndTake(n)
+			}
+
+			_, writeErr := file.Write(buf[:n])
+			if writeErr != nil {
+				//	fmt.Println("Error writing to part file:", writeErr)
+				return
+			}
+
+			download.Manager.Mutex.Lock()
+			download.DownloadedBytes += int64(n)
+			percentage := float64(download.DownloadedBytes) / float64(download.FileSize) * 100
+			download.Progress = int64(percentage)
+			download.Manager.Mutex.Unlock()
+
+			cmd := func() tea.Msg {
+				return ProgressMsg{Download: download}
+			}
+			tea.Println(cmd)
+
+			download.ShowProgress()
+			download.changeDownloadStatus()
+			SaveQueuesToFile()
+
+			totalBytesRead += int64(n)
+			if totalBytesRead >= (end - start + 1) {
+				break
+			}
+		}
+
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
 			fmt.Println("Error reading data:", err)
 			return
-		}
-
-		// Control overlapping among workers
-		remaining := end - start + 1 - totalBytesRead
-		if int64(n) > remaining {
-			n = int(remaining)
-		}
-
-		// Apply rate limiting
-		if download.Manager.TokenBucket != nil {
-			download.Manager.TokenBucket.WaitAndTake(n)
-		}
-
-		_, err = file.Write(buf[:n])
-		if err != nil {
-			fmt.Println("Error writing to part file:", err)
-			return
-		}
-
-		download.Manager.Mutex.Lock()
-		download.DownloadedBytes += int64(n)
-		percentage := float64(download.DownloadedBytes) / float64(download.FileSize) * 100
-		download.Progress = int64(percentage)
-		download.Manager.Mutex.Unlock()
-
-		cmd := func() tea.Msg {
-			return ProgressMsg{Download: download}
-		}
-		tea.Println(cmd)
-
-		download.ShowProgress()
-		download.changeDownloadStatus()
-		SaveQueuesToFile()
-
-		totalBytesRead += int64(n)
-		if totalBytesRead >= (end - start + 1) {
-			break
 		}
 	}
 }
@@ -307,11 +305,6 @@ func (download *Download) changeDownloadStatus() {
 
 	//	fmt.Printf("Download status updated: %s -> %s\n", download.FileName, download.Status)
 }
-
-func (dm *DownloadManager) deleteFromQueue(download *Download, queue *Queue) {
-	//TODO
-}
-
 func (download *Download) Retry() {
 	if download.Status != Failed {
 		fmt.Println("Retry not allowed, download isn't in failed status")
@@ -364,7 +357,7 @@ func (download *Download) CheckRangeSupport() bool {
 	defer resp.Body.Close()
 
 	acceptRanges := resp.Header.Get("Accept-Ranges")
-	return resp.StatusCode == http.StatusPartialContent && acceptRanges == "bytes"
+	return acceptRanges == "bytes"
 }
 
 func (download *Download) ShowProgress() {
