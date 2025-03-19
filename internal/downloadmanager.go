@@ -16,7 +16,7 @@ import (
 )
 
 type DownloadManager struct {
-	ChunkSize   int64 `json:"chunkSize"`
+	ChunkSize   int64 `json:"chunkSize"` // size that each worker process
 	Workers     int
 	Cancel      context.CancelFunc
 	Ctx         context.Context
@@ -47,6 +47,7 @@ func getFileNameFromHeader(resp *http.Response) (string, bool) {
 		return "", false // it means server didn't send any contentDisp
 	}
 
+	// it returns the media type automatically!
 	_, params, err := mime.ParseMediaType(contentDisp)
 	if err != nil {
 		return "", false
@@ -99,6 +100,7 @@ func (download *Download) GetFileSizeAndName() error {
 
 	return nil
 }
+
 func (download *Download) downloadChunk(start int64, end int64, partNum int, wg *sync.WaitGroup) {
 	defer wg.Done()
 
