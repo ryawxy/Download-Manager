@@ -245,7 +245,21 @@ func (download *Download) StartDownload() error {
 	}
 
 	wg.Wait()
-	return mergeFiles(download)
+
+	select {
+	// context cancelled here
+	case <-download.Manager.Ctx.Done():
+		fmt.Printf("Download %s was canceled, skipping merge.\n", download.FileName)
+		download.Status = Failed
+		return nil
+
+	// finished and ready for merging
+	default:
+		if download.Status == InProgress && download.DownloadedBytes >= download.FileSize {
+			download.Status = Completed
+		}
+		return mergeFiles(download)
+	}
 }
 
 func mergeFiles(download *Download) error {
@@ -288,8 +302,31 @@ func mergeFiles(download *Download) error {
 	return nil
 }
 func (download *Download) CancelDownload() {
+	download.Manager.Mutex.Lock()
+	defer download.Manager.Mutex.Unlock()
+
 	download.Manager.Cancel()
-	fmt.Println("Download cancelled.")
+	download.Status = Failed
+	download.Paused = false
+	fmt.Println("Download cancelled for:", download.FileName)
+
+	// for debugging
+	time.Sleep(500 * time.Millisecond)
+
+	for i := 0; i < download.Manager.Workers; i++ {
+		partFileName := fmt.Sprintf("%s.part%d", download.FileName, i)
+		partPath := filepath.Join(download.Directory, partFileName)
+
+		err := os.Remove(partPath)
+		if err != nil && !os.IsNotExist(err) {
+			fmt.Printf("Warning: Failed to delete part file %s: %v\n", partPath, err)
+		} else if err == nil {
+			fmt.Printf("Deleted part file: %s\n", partPath)
+		}
+	}
+
+	_ = SaveQueuesToFile()
+	fmt.Println("Download cancelled successfully.")
 }
 
 func (download *Download) changeDownloadStatus() {

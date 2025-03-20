@@ -16,11 +16,11 @@ func init() {
 	if err != nil {
 		fmt.Println("Error loading queues:", err)
 	}
-	tui.Start()
+	//tui.Start()
 }
 
 func main() {
-	//tui.Start()
+	tui.Start()
 	//cliMain()
 }
 func cliMain() {
