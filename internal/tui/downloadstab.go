@@ -92,6 +92,9 @@ func getActions(status internal.Status) []string {
 		return []string{"Pause", "Cancel", "Delete"}
 	case internal.Pending:
 		return []string{"Start", "Delete", "Cancel"}
+	case internal.Cancelled:
+		return []string{"Delete"}
+
 	default:
 		return []string{"Start", "Delete", "Cancel"}
 	}

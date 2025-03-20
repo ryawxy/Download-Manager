@@ -10,6 +10,7 @@ const (
 	InProgress Status = "inProgress"
 	Completed  Status = "completed"
 	Pending    Status = "pending"
+	Cancelled  Status = "cancelled"
 )
 
 var DownloadsList []*Download

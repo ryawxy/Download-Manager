@@ -147,7 +147,7 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 		select {
 		case <-download.Manager.Ctx.Done():
 			file.Close()
-			fmt.Println("Download chunk canceled for:", partFileName)
+			//		fmt.Println("Download chunk canceled for:", partFileName)
 			return
 		default:
 		}
@@ -220,7 +220,7 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 			if err == io.EOF {
 				break
 			}
-			fmt.Println("Error reading data:", err)
+			//	fmt.Println("Error reading data:", err)
 			return
 		}
 	}
@@ -282,8 +282,8 @@ func (download *Download) StartDownload() error {
 	select {
 	// context cancelled here
 	case <-download.Manager.Ctx.Done():
-		fmt.Printf("Download %s was canceled, skipping merge.\n", download.FileName)
-		download.Status = Failed
+		//	fmt.Printf("Download %s was canceled, skipping merge.\n", download.FileName)
+		download.Status = Cancelled
 		return nil
 
 	// finished and ready for merging
@@ -309,7 +309,7 @@ func mergeFiles(download *Download) error {
 		partPath := filepath.Join(download.Directory, fmt.Sprintf("%s.part%d", download.FileName, i))
 
 		if _, err := os.Stat(partPath); os.IsNotExist(err) {
-			fmt.Printf("Warning: Part %d is missing, skipping...\n", i)
+			//	fmt.Printf("Warning: Part %d is missing, skipping...\n", i)
 			continue
 		}
 
@@ -327,7 +327,7 @@ func mergeFiles(download *Download) error {
 		partFile.Close()
 
 		if err := os.Remove(partPath); err != nil {
-			fmt.Printf("Warning: failed to remove part %d: %v\n", i, err)
+			//fmt.Printf("Warning: failed to remove part %d: %v\n", i, err)
 		}
 	}
 
@@ -339,9 +339,9 @@ func (download *Download) CancelDownload() {
 	defer download.Manager.Mutex.Unlock()
 
 	download.Manager.Cancel()
-	download.Status = Failed
+	download.Status = Cancelled
 	download.Paused = false
-	fmt.Println("Download cancelled for:", download.FileName)
+	//fmt.Println("Download cancelled for:", download.FileName)
 
 	// for debugging
 	time.Sleep(500 * time.Millisecond)
@@ -352,9 +352,9 @@ func (download *Download) CancelDownload() {
 
 		err := os.Remove(partPath)
 		if err != nil && !os.IsNotExist(err) {
-			fmt.Printf("Warning: Failed to delete part file %s: %v\n", partPath, err)
+			//fmt.Printf("Warning: Failed to delete part file %s: %v\n", partPath, err)
 		} else if err == nil {
-			fmt.Printf("Deleted part file: %s\n", partPath)
+			//fmt.Printf("Deleted part file: %s\n", partPath)
 		}
 	}
 
@@ -368,11 +368,11 @@ func (download *Download) changeDownloadStatus() {
 
 	if download.Progress == 0 {
 		download.Status = Pending
-	} else if download.Progress > 0 && download.DownloadedBytes < download.FileSize {
+	} else if download.Progress > 0 && download.DownloadedBytes < download.FileSize && download.Status != Cancelled {
 		download.Status = InProgress
 	} else if download.DownloadedBytes >= download.FileSize {
 		download.Status = Completed
-	} else {
+	} else if download.Status != Cancelled {
 		download.Status = Failed
 	}
 
