@@ -13,16 +13,24 @@ import (
 )
 
 type exitQueuesMsg struct{}
+type QueueActionMsg struct {
+	QueueID string
+	Action  string // "scheduled", "started", "cannot_start"
+	Message string
+}
+
+type clearMessageMsg struct{}
 
 type QueuesTab struct {
 	queues           []*internal.Queue
 	queueCursor      int
 	contentCursor    int
-	buttonsCursor    int // 0 = state control, 1 = delete
+	buttonsCursor    int
 	isActive         bool
 	controlContent   bool
 	creatingNewQueue bool
 	inputs           []textinput.Model
+	message          string
 }
 
 func temporaryRandomQueues() []*internal.Queue {
@@ -30,6 +38,38 @@ func temporaryRandomQueues() []*internal.Queue {
 		{Id: "queue1", Directory: "Downloads/queue1", MaxConcurrentDownloads: 5, BandwidthLimit: 1000, NumberOfTriesLimit: 3, StartTime: time.Now(), EndTime: time.Now().Add(2 * time.Hour)},
 		{Id: "queue2", Directory: "Downloads/queue2", MaxConcurrentDownloads: 10, BandwidthLimit: 2000, NumberOfTriesLimit: 2, StartTime: time.Now(), EndTime: time.Now().Add(3 * time.Hour)},
 		{Id: "queue3", Directory: "Downloads/queue3", MaxConcurrentDownloads: 7, BandwidthLimit: 1500, NumberOfTriesLimit: 4, StartTime: time.Now(), EndTime: time.Now().Add(1 * time.Hour)},
+	}
+}
+
+func scheduleQueueCmd(queue *internal.Queue) tea.Cmd {
+	return func() tea.Msg {
+		now := time.Now()
+		if now.After(queue.EndTime) {
+			return QueueActionMsg{
+				QueueID: queue.Id,
+				Action:  "cannot_start",
+				Message: fmt.Sprintf("Cannot start queue %s: current time is past the end time", queue.Id),
+			}
+		} else if now.Before(queue.StartTime) {
+			delay := queue.StartTime.Sub(now)
+			time.AfterFunc(delay, func() {
+				if time.Now().Before(queue.EndTime) {
+					internal.StartQueueDownloads(queue)
+				}
+			})
+			return QueueActionMsg{
+				QueueID: queue.Id,
+				Action:  "scheduled",
+				Message: fmt.Sprintf("Queue %s is scheduled to start in %v", queue.Id, delay),
+			}
+		} else {
+			go internal.StartQueueDownloads(queue)
+			return QueueActionMsg{
+				QueueID: queue.Id,
+				Action:  "started",
+				Message: fmt.Sprintf("Queue %s has started", queue.Id),
+			}
+		}
 	}
 }
 
@@ -189,11 +229,10 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				q.buttonsCursor = -1
 			case "enter":
 				if q.buttonsCursor != -1 {
-					// Button mode: 0 = state control; 1 = delete.
 					if q.buttonsCursor == 0 {
 						currentQueue := q.queues[q.queueCursor]
 						if !currentQueue.HasStarted {
-							go internal.ScheduleQueueDownloads(currentQueue)
+							return q, scheduleQueueCmd(currentQueue)
 						} else if currentQueue.Paused {
 							go currentQueue.ResumeQueue()
 						} else {
@@ -252,6 +291,9 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							startTime,
 							endTime,
 						)
+						newQueue.NumberOfTriesLimit = retries
+						newQueue.BandwidthLimit = bwLimit
+						newQueue.MaxConcurrentDownloads = maxconcurrent
 						q.queues = append(q.queues, newQueue)
 						q.creatingNewQueue = false
 						q.controlContent = false
@@ -286,6 +328,15 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			q.setInputs()
 		}
 		return q, tickCmd()
+
+	case QueueActionMsg:
+		q.message = msg.Message
+		return q, tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+			return clearMessageMsg{}
+		})
+		//case clearMessageMsg:
+		//	q.message = ""
+		//	return q, nil
 	}
 	return q, nil
 }
@@ -338,7 +389,7 @@ func (q *QueuesTab) View() string {
 	stateButton := "[State]"
 	deleteButton := "[Delete]"
 	currentQueue := q.queues[q.queueCursor]
-	if !currentQueue.HasStarted {
+	if currentQueue.CancelFunc == nil {
 		stateButton = "[Start]"
 	} else if currentQueue.Paused {
 		stateButton = "[Resume]"

@@ -16,17 +16,20 @@ const (
 var DownloadsList []*Download
 
 type Download struct {
-	URL             string `json:"URL"`
-	FileName        string `json:"FileName"`
-	FileSize        int64  `json:"FileSize"`
-	Status          Status `json:"status"`
-	Progress        int64  `json:"progress"`
-	StartTime       time.Time
-	Manager         *DownloadManager `json:"-"`
-	Paused          bool
-	DownloadedBytes int64     `json:"downloaded_bytes"`
-	Directory       string    `json:"directory"`
-	QueueName       string    `json:"queue_name"`
-	LastUpdateTime  time.Time // Last time we update speed
-	Speed           float64   // Speed in bytes per second
+	URL                string `json:"URL"`
+	FileName           string `json:"FileName"`
+	FileSize           int64  `json:"FileSize"`
+	Status             Status `json:"status"`
+	Progress           int64  `json:"progress"`
+	StartTime          time.Time
+	Manager            *DownloadManager `json:"-"`
+	Paused             bool
+	DownloadedBytes    int64  `json:"downloaded_bytes"`
+	Directory          string `json:"directory"`
+	QueueName          string `json:"queue_name"`
+	LastUpdateTime     time.Time
+	LastBytes          int64
+	Speed              float64
+	lastSpeedCalcTime  time.Time
+	lastSpeedCalcBytes int64
 }

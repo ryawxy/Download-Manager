@@ -3,7 +3,6 @@ package internal
 import (
 	"context"
 	"fmt"
-	tea "github.com/charmbracelet/bubbletea"
 	"io"
 	"mime"
 	"net/http"
@@ -44,10 +43,9 @@ func (download *Download) NewDownloadManager(workers int, tb *TokenBucket) *Down
 func getFileNameFromHeader(resp *http.Response) (string, bool) {
 	contentDisp := resp.Header.Get("Content-Disposition")
 	if contentDisp == "" {
-		return "", false // it means server didn't send any contentDisp
+		return "", false
 	}
 
-	// it returns the media type automatically!
 	_, params, err := mime.ParseMediaType(contentDisp)
 	if err != nil {
 		return "", false
@@ -71,7 +69,7 @@ func (download *Download) getFileNameFromURL() string {
 	filename := segments[len(segments)-1]
 
 	if filename == "" || strings.Contains(filename, ".") == false {
-		return "downloaded_file" // same as above
+		return "downloaded_file"
 	}
 
 	return filename
@@ -100,14 +98,12 @@ func (download *Download) GetFileSizeAndName() error {
 
 	return nil
 }
-
 func (download *Download) downloadChunk(start int64, end int64, partNum int, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	partFileName := fmt.Sprintf("%s.part%d", download.FileName, partNum)
 	fullPath := filepath.Join(download.Directory, partFileName)
 
-	// Open file in append mode to resume partial downloads
 	file, err := os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		fmt.Println("Error creating part file:", err)
@@ -118,7 +114,6 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 	fileInfo, _ := file.Stat()
 	currentOffset := fileInfo.Size()
 	totalBytesRead := currentOffset
-
 	if totalBytesRead >= (end - start + 1) {
 		return
 	}
@@ -128,38 +123,39 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 		fmt.Println("Error creating request:", err)
 		return
 	}
-
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
+
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
+		if err == context.Canceled {
+			fmt.Println("Download cancelled before request started")
+			return
+		}
 		fmt.Println("Error during download:", err)
 		return
 	}
-
-	encoding := resp.Header.Get("Content-Encoding")
-	if encoding == "gzip" {
-		fmt.Println("Warning: Server is compressing the response, decoding needed!")
-	}
-
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusPartialContent && start != 0 {
 		fmt.Println("Warning: Server does not support partial content properly.")
 		return
 	}
-	defer file.Close()
 
 	buf := make([]byte, 1024)
-	totalBytesRead = int64(0)
-	lastBytes := int64(0)
 
 	for {
+		select {
+		case <-download.Manager.Ctx.Done():
+			return
+		default:
+		}
+
 		download.Manager.Mutex.Lock()
 		for download.Paused {
 			download.Manager.Mutex.Unlock()
 			select {
 			case <-download.Manager.Ctx.Done():
-				fmt.Println("Download cancelled")
+				fmt.Println("Download cancelled while paused")
 				return
 			default:
 				time.Sleep(500 * time.Millisecond)
@@ -181,7 +177,7 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 
 			_, writeErr := file.Write(buf[:n])
 			if writeErr != nil {
-				//	fmt.Println("Error writing to part file:", writeErr)
+				fmt.Println("Error writing to part file:", writeErr)
 				return
 			}
 
@@ -191,26 +187,14 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 			download.Progress = int64(percentage)
 			download.Manager.Mutex.Unlock()
 
-			cmd := func() tea.Msg {
-				return ProgressMsg{Download: download}
-			}
-			tea.Println(cmd)
+			// Calculate speed after updating DownloadedBytes
+			download.calculateSpeed()
 
 			download.ShowProgress()
 			download.changeDownloadStatus()
 			SaveQueuesToFile()
 
 			totalBytesRead += int64(n)
-			now := time.Now()
-
-			// Update speed every 500ms
-			if now.Sub(download.LastUpdateTime) >= 500*time.Millisecond {
-				elapsed := now.Sub(download.LastUpdateTime).Seconds()
-				bytesSinceLast := download.DownloadedBytes - lastBytes
-				download.Speed = float64(bytesSinceLast) / elapsed // Bytes per second
-				download.LastUpdateTime = now
-				lastBytes = download.DownloadedBytes
-			}
 			if totalBytesRead >= (end - start + 1) {
 				break
 			}
@@ -219,21 +203,30 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 		if err != nil {
 			if err == io.EOF {
 				break
+			} else if err == context.Canceled {
+				fmt.Println("Download cancelled during read")
+				return
 			}
-			//	fmt.Println("Error reading data:", err)
+			fmt.Println("Error reading data:", err)
 			return
 		}
 	}
 }
 func (download *Download) StartDownload() error {
-
 	download.StartTime = time.Now()
+	download.LastUpdateTime = download.StartTime
+	download.LastBytes = 0
+	// Initialize speed calculation fields
+	download.lastSpeedCalcTime = download.StartTime
+	download.lastSpeedCalcBytes = 0
+	download.Speed = 0.0
+
 	if !download.CheckRangeSupport() {
-		fmt.Println("Server does NOT support partial downloads. Switching to single-threaded mode...")
+		//	fmt.Println("Server does NOT support partial downloads. Switching to single-threaded mode...")
 		download.Manager.Workers = 1
 		download.Manager.ChunkSize = download.FileSize
 	} else {
-		fmt.Println("Server supports partial downloads. Using multi-threaded mode.")
+		//	fmt.Println("Server supports partial downloads. Using multi-threaded mode.")
 	}
 
 	if err := os.MkdirAll(download.Directory, 0755); err != nil {
@@ -250,14 +243,8 @@ func (download *Download) StartDownload() error {
 
 	var wg sync.WaitGroup
 	for i := 0; i < download.Manager.Workers; i++ {
-		//start := int64(i) * download.Manager.ChunkSize
 		start := int64(i) * chunkSize
-		//end := start + download.Manager.ChunkSize - 1
 		end := start + chunkSize - 1
-
-		//if end >= download.FileSize {
-		//	end = download.FileSize - 1
-		//}
 		if i == download.Manager.Workers-1 {
 			end += remainingBytes
 		}
@@ -269,13 +256,9 @@ func (download *Download) StartDownload() error {
 	wg.Wait()
 
 	select {
-	// context cancelled here
 	case <-download.Manager.Ctx.Done():
-		//	fmt.Printf("Download %s was canceled, skipping merge.\n", download.FileName)
 		download.Status = Cancelled
 		return nil
-
-	// finished and ready for merging
 	default:
 		if download.Status == InProgress && download.DownloadedBytes >= download.FileSize {
 			download.Status = Completed
@@ -292,7 +275,7 @@ func mergeFiles(download *Download) error {
 	}
 	defer outputFile.Close()
 
-	fmt.Println("merging downloaded parts...")
+	//fmt.Println("merging downloaded parts...")
 
 	for i := 0; i < download.Manager.Workers; i++ {
 		partPath := filepath.Join(download.Directory, fmt.Sprintf("%s.part%d", download.FileName, i))
@@ -395,7 +378,6 @@ func (download *Download) Retry(queue *Queue) error {
 	download.DownloadedBytes = 0
 	download.Progress = 0
 
-	// this is just for cleaning up old parts (which failed before)
 	for i := 0; i < download.Manager.Workers; i++ {
 		partPath := filepath.Join(download.Directory, fmt.Sprintf("%s.part%d", download.FileName, i))
 		os.Remove(partPath)
@@ -445,15 +427,25 @@ func (download *Download) CheckRangeSupport() bool {
 
 	return resp.Header.Get("Accept-Ranges") == "bytes"
 }
-
 func (download *Download) ShowProgress() {
 	download.Manager.Mutex.Lock()
 	defer download.Manager.Mutex.Unlock()
 
-	download.Progress = int64(float64(download.DownloadedBytes) / float64(download.FileSize) * 100)
-	//barLength := 30
-	//filled := int(percentage / 100 * float64(barLength))
-	//bar := strings.Repeat("█", filled) + strings.Repeat("-", barLength-filled)
-	//
-	//fmt.Printf("\rDownloading: [%s] %.2f%%", bar, percentage)
+	percentage := float64(download.DownloadedBytes) / float64(download.FileSize) * 100
+	download.Progress = int64(percentage)
+	//speedKBps := download.Speed / 1024
+	//	fmt.Printf("\rProgress: %.2f%% | Speed: %.2f KB/s", percentage, speedKBps)
+}
+func (download *Download) calculateSpeed() {
+	download.Manager.Mutex.Lock()
+	defer download.Manager.Mutex.Unlock()
+
+	now := time.Now()
+	elapsed := now.Sub(download.lastSpeedCalcTime).Seconds()
+	if elapsed >= 1.0 {
+		bytesSinceLast := download.DownloadedBytes - download.lastSpeedCalcBytes
+		download.Speed = float64(bytesSinceLast) / elapsed
+		download.lastSpeedCalcBytes = download.DownloadedBytes
+		download.lastSpeedCalcTime = now
+	}
 }

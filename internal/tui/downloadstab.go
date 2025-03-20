@@ -3,7 +3,6 @@ package tui
 import (
 	"IDM/internal"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -64,18 +63,8 @@ func calculateTimeLeft(d internal.Download) string {
 }
 
 func getQueueName(download *internal.Download) string {
-	var keys []string
-	for key := range internal.QueuesList {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		queue := internal.QueuesList[key]
-		for _, d := range queue.Downloads {
-			if d.FileName == download.FileName {
-				return queue.Id
-			}
-		}
+	if download.QueueName != "" {
+		return download.QueueName
 	}
 	return "Unknown"
 }
