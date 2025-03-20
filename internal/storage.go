@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -35,6 +36,7 @@ func LoadQueuesFromFile() error {
 		BandwidthLimit: 1000000,
 	}
 	QueuesList["Default"] = q
+
 	storageMutex.Lock()
 	defer storageMutex.Unlock()
 
@@ -50,22 +52,54 @@ func LoadQueuesFromFile() error {
 	if err != nil {
 		return err
 	}
+
 	for _, q := range QueuesList {
 		q.StartTime = q.StartTime.UTC()
 		q.EndTime = q.EndTime.UTC()
 		rate := time.Second / time.Duration(q.BandwidthLimit)
 		q.TokenBucket = NewTokenBucket(q.BandwidthLimit, rate)
 
-	}
-	for _, q := range QueuesList {
 		for _, d := range q.Downloads {
 			DownloadsList = append(DownloadsList, d)
 		}
 	}
 
+	ResumeInProgressDownloads()
 	//fmt.Println("Queues loaded successfully.")
 	return nil
 }
+
+func ResumeInProgressDownloads() {
+	for _, download := range DownloadsList {
+		if download.Status == InProgress {
+			fmt.Printf("Resuming in-progress download: %s\n", download.FileName)
+
+			if download.Manager == nil {
+				download.NewDownloadManager(WORKERS, QueuesList[download.QueueName].TokenBucket)
+			}
+
+			// reset progress if restart from scratch
+			// download.DownloadedBytes = 0
+			// download.Progress = 0
+
+			// clean up partial files from previous run
+			for i := 0; i < download.Manager.Workers; i++ {
+				partPath := filepath.Join(download.Directory, fmt.Sprintf("%s.part%d", download.FileName, i))
+				os.Remove(partPath)
+			}
+
+			go func(d *Download) {
+				err := d.StartDownload()
+				if err != nil {
+					fmt.Printf("Failed to resume download %s: %v\n", d.FileName, err)
+					d.Status = Failed
+				}
+				SaveQueuesToFile()
+			}(download)
+		}
+	}
+}
+
 func (q *Queue) MarshalJSON() ([]byte, error) {
 	type Alias Queue
 	return json.Marshal(&struct {

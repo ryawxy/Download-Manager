@@ -39,7 +39,7 @@ var (
 				Padding(0, 1)
 )
 
-var colWidths = []int{20, 15, 30, 12, 12, 30, 30}
+var colWidths = []int{20, 15, 30, 12, 12, 12, 30}
 
 func NewDownloadsTab() DownloadsTab {
 	return DownloadsTab{downloads: internal.DownloadsList, cursor: 0, pageStart: 0}
@@ -92,12 +92,15 @@ func getActions(status internal.Status) []string {
 		return []string{"Pause", "Cancel", "Delete"}
 	case internal.Pending:
 		return []string{"Start", "Delete", "Cancel"}
+	case internal.Cancelled:
+		return []string{"Delete"}
+
 	default:
 		return []string{"Start", "Delete", "Cancel"}
 	}
 }
 func (d DownloadsTab) RenderTable() string {
-	columns := []string{"Filename", "Queue", "Progress", "Time Left", "Status", "Action", "Url"}
+	columns := []string{"Filename", "Queue", "Progress", "Time Left", "Status", "Speed", "Action"}
 	var headerRow []string
 	for i, col := range columns {
 		headerRow = append(headerRow, lipgloss.NewStyle().Width(colWidths[i]).MaxWidth(colWidths[i]).Render(col))
@@ -134,6 +137,13 @@ func (d DownloadsTab) RenderTable() string {
 				actionStr = "[" + strings.Join(actions, "|") + "]"
 			}
 		}
+
+		// Speed display: show "N/A" if not in progress
+		speedStr := "N/A"
+		if entry.Status == internal.InProgress {
+			speedStr = formatSpeed(entry.Speed)
+		}
+
 		columns := []string{
 			lipgloss.NewStyle().
 				Width(colWidths[0]).
@@ -153,12 +163,11 @@ func (d DownloadsTab) RenderTable() string {
 				Render(string(entry.Status)),
 			lipgloss.NewStyle().
 				Width(colWidths[5]).
-				MaxWidth(colWidths[5]).
-				Render(actionStr),
+				Render(speedStr),
 			lipgloss.NewStyle().
 				Width(colWidths[6]).
 				MaxWidth(colWidths[6]).
-				Render(entry.URL),
+				Render(actionStr),
 		}
 		rowContent := lipgloss.JoinHorizontal(
 			lipgloss.Left,
@@ -168,7 +177,7 @@ func (d DownloadsTab) RenderTable() string {
 			columns[3], " ",
 			columns[4], " ",
 			columns[5], " ",
-			columns[6], " ",
+			columns[6],
 		)
 		if i == d.cursor {
 			table += "  " + selectedRowStyle.Render(rowContent) + "\n"
@@ -187,6 +196,7 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return d, nil
 		}
 		switch msg.String() {
+
 		case "up":
 			if d.cursor > 0 {
 				d.cursor--
@@ -231,26 +241,25 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				actions := getActions(d.downloads[d.cursor].Status)
 				if len(actions) > 0 && d.optionsCursor < len(actions) {
 					selectedAction := actions[d.optionsCursor]
-					selectedDownload := d.downloads[d.cursor]
-
 					switch selectedAction {
 					case "Start":
-						go selectedDownload.StartDownload()
+						go d.downloads[d.cursor].StartDownload()
 					case "Pause":
-						go selectedDownload.PauseDownload()
+						go d.downloads[d.cursor].PauseDownload()
 					case "Resume":
-						go selectedDownload.ResumeDownload()
+						go d.downloads[d.cursor].ResumeDownload()
 					case "Cancel":
-						go selectedDownload.CancelDownload()
+						go d.downloads[d.cursor].CancelDownload()
 					case "Retry":
-						// Handle retry logic
+						//go d.downloads[d.cursor].Retry()
 					case "Delete":
-						if queue, exists := internal.QueuesList[selectedDownload.QueueName]; exists {
-							err := queue.RemoveDownload(selectedDownload.FileName)
+						selectedDL := d.downloads[d.cursor]
+						if queue, exists := internal.QueuesList[selectedDL.QueueName]; exists {
+							err := queue.RemoveDownload(selectedDL.FileName)
 							if err == nil {
 								newDownloads := make([]*internal.Download, 0)
 								for _, dl := range internal.DownloadsList {
-									if dl.FileName != selectedDownload.FileName {
+									if dl.FileName != selectedDL.FileName {
 										newDownloads = append(newDownloads, dl)
 									}
 								}
@@ -259,8 +268,14 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 								if d.cursor >= len(d.downloads) {
 									d.cursor = max(0, len(d.downloads)-1)
 								}
+								if d.cursor >= len(d.downloads) {
+									d.cursor = max(0, len(d.downloads)-1)
+								}
 							}
 						}
+
+					default:
+						fmt.Printf("Selected action: %s on %s\n", selectedAction, d.downloads[d.cursor].FileName)
 					}
 				}
 				d.showOptions = false
@@ -277,11 +292,18 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if queue, exists := internal.QueuesList[dl.QueueName]; exists {
 				for _, qDL := range queue.Downloads {
 					if qDL.FileName == dl.FileName {
-						*d.downloads[i] = *qDL
+						d.downloads[i].Progress = qDL.Progress
+						d.downloads[i].Status = qDL.Status
+						d.downloads[i].FileSize = qDL.FileSize
 						break
 					}
 				}
 			}
+		}
+		if d.cursor < d.pageStart {
+			d.pageStart = d.cursor
+		} else if d.pageStart+tableSize <= d.cursor {
+			d.pageStart = d.cursor - tableSize + 1
 		}
 		return d, tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
 			return tickMsg(t)
@@ -320,4 +342,14 @@ func (d DownloadsTab) Init() tea.Cmd {
 
 func (d DownloadsTab) getFooter() string {
 	return "Use '↑/↓' to navigate rows, '→' to select actions, 'Enter' to execute"
+}
+
+func formatSpeed(speed float64) string {
+	if speed < 1024 {
+		return fmt.Sprintf("%.0f B/s", speed)
+	} else if speed < 1024*1024 {
+		return fmt.Sprintf("%.1f KB/s", speed/1024)
+	} else {
+		return fmt.Sprintf("%.1f MB/s", speed/(1024*1024))
+	}
 }

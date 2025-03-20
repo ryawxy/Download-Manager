@@ -13,11 +13,17 @@ type Queue struct {
 	Id                     string       `json:"id"`
 	Downloads              []*Download  `json:"downloads"`
 	Directory              string       `json:"directory"`
+	DirectorySet           bool         `json:"directory_set"`
 	BandwidthLimit         int          `json:"bandwidth_limit"`
+	BandwidthSet           bool         `json:"bandwidth_set"`
 	NumberOfTriesLimit     int          `json:"number_of_tries_limit"`
+	RetriesSet             bool         `json:"retries_set"`
 	StartTime              time.Time    `json:"start_time"`
+	StartTimeSet           bool         `json:"start_time_set"`
 	EndTime                time.Time    `json:"end_time"`
+	EndTimeSet             bool         `json:"end_time_set"`
 	MaxConcurrentDownloads int          `json:"max_concurrent_downloads"`
+	MaxConcurrentSet       bool         `json:"max_concurrent_set"`
 	TokenBucket            *TokenBucket `json:"-"`
 	mutex                  sync.Mutex   `json:"-"`
 	CancelFunc             func()       `json:"-"`
@@ -30,20 +36,52 @@ var QueuesList = make(map[string]*Queue)
 func NewQueue(id, directory string, retriesLimit int, bandwidthLimit int,
 	maxConcurrent int, startTime, endTime time.Time) *Queue {
 
-	rate := time.Second / time.Duration(bandwidthLimit)
+	// invalid or duplicate name - only field which required here
+	if id == "" || QueuesList[id] != nil {
+		return nil
+	}
 
 	q := &Queue{
-		Id:                     id,
-		Downloads:              make([]*Download, 0),
-		Directory:              directory,
-		NumberOfTriesLimit:     retriesLimit,
-		BandwidthLimit:         bandwidthLimit,
-		MaxConcurrentDownloads: maxConcurrent,
-		StartTime:              startTime,
-		EndTime:                endTime,
-		TokenBucket:            NewTokenBucket(bandwidthLimit, rate),
-		HasStarted:             false,
+		Id:         id,
+		Downloads:  make([]*Download, 0),
+		HasStarted: false,
+		//Directory:              directory,
+		//NumberOfTriesLimit:     retriesLimit,
+		//BandwidthLimit:         bandwidthLimit,
+		//MaxConcurrentDownloads: maxConcurrent,
+		//StartTime:              startTime,
+		//EndTime:                endTime,
+		//TokenBucket:            NewTokenBucket(bandwidthLimit, rate),
 	}
+
+	// Set fields only if provided
+	if directory != "" {
+		q.Directory = directory
+		q.DirectorySet = true
+	}
+	if retriesLimit != 0 { // 0 means unset
+		q.NumberOfTriesLimit = retriesLimit
+		q.RetriesSet = true
+	}
+	if bandwidthLimit != 0 { // 0 means unset, no TokenBucket
+		q.BandwidthLimit = bandwidthLimit
+		q.BandwidthSet = true
+		rate := time.Second / time.Duration(bandwidthLimit)
+		q.TokenBucket = NewTokenBucket(bandwidthLimit, rate)
+	}
+	if maxConcurrent != 0 { // 0 means unset
+		q.MaxConcurrentDownloads = maxConcurrent
+		q.MaxConcurrentSet = true
+	}
+	if !startTime.IsZero() {
+		q.StartTime = startTime
+		q.StartTimeSet = true
+	}
+	if !endTime.IsZero() {
+		q.EndTime = endTime
+		q.EndTimeSet = true
+	}
+
 	QueuesList[id] = q
 	_ = SaveQueuesToFile()
 	return q
@@ -55,7 +93,6 @@ func (q *Queue) StopDownloads() {
 		fmt.Println("Downloads in queue", q.Id, "stopped due to end time.")
 	}
 }
-
 func (q *Queue) EditQueue(directory string, retriesLimit, maxConcurrent int, startTime, endTime time.Time, bandwidthLimit int) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
@@ -78,9 +115,17 @@ func (q *Queue) EditQueue(directory string, retriesLimit, maxConcurrent int, sta
 func (q *Queue) AddDownload(d *Download) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
-	d.QueueName = q.Id
 	q.Downloads = append(q.Downloads, d)
 	SaveQueuesToFile()
+
+	//for _, queue := range QueuesList {
+	//	if queue.Id == q.Id {
+	//		d.Status = Pending
+	//		q.Downloads = append(q.Downloads, d)
+	//		_ = SaveQueuesToFile()
+	//	}
+	//}
+
 	return nil
 }
 
@@ -95,7 +140,10 @@ func (q *Queue) RemoveDownload(name string) error {
 
 			for j, globalDL := range DownloadsList {
 				if globalDL.FileName == name {
-					DownloadsList = append(DownloadsList[:j], DownloadsList[j+1:]...)
+					DownloadsList = append(
+						DownloadsList[:j],
+						DownloadsList[j+1:]...,
+					)
 					break
 				}
 			}
@@ -115,26 +163,15 @@ func StartQueueDownloads(q *Queue) {
 	}
 	q.mutex.Unlock()
 
-	now := time.Now()
-	if now.Before(q.StartTime) {
-		fmt.Printf("Queue %s hasn't started yet (starts at %s)\n", q.Id, q.StartTime.Format("2006-01-02 15:04"))
-		return
-	}
-	if now.After(q.EndTime) {
-		fmt.Printf("Queue %s has already ended (ended at %s)\n", q.Id, q.EndTime.Format("2006-01-02 15:04"))
-		return
-	}
-
 	fmt.Println("Starting downloads in queue:", q.Id)
 	sem := make(chan struct{}, q.MaxConcurrentDownloads)
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
 	q.CancelFunc = cancel
 
-	stopDelay := time.Until(q.EndTime)
-	if stopDelay > 0 {
-		time.AfterFunc(stopDelay, q.StopDownloads)
-	}
+	time.AfterFunc(time.Until(q.EndTime), func() {
+		q.StopDownloads()
+	})
 
 	for _, d := range q.Downloads {
 		wg.Add(1)
@@ -188,16 +225,16 @@ func (q *Queue) PauseQueue() {
 	defer q.mutex.Unlock()
 
 	if q.Paused {
-		//	fmt.Println("Queue is already paused")
+		fmt.Println("Queue is already paused")
 		return
 	}
 
 	q.Paused = true
 	if q.CancelFunc != nil {
-		q.CancelFunc()
+		q.CancelFunc() // it will cancel all ongoing downloads
 	}
 
-	//	fmt.Printf("Queue %s paused successfully\n", q.Id)
+	fmt.Printf("Queue %s paused successfully\n", q.Id)
 }
 
 func (q *Queue) ResumeQueue() {
@@ -205,21 +242,17 @@ func (q *Queue) ResumeQueue() {
 	defer q.mutex.Unlock()
 
 	if !q.Paused {
-		//	fmt.Println("Queue is already running")
+		fmt.Println("Queue is already running")
 		return
 	}
 
 	q.Paused = false
-	//	fmt.Printf("Queue %s resumed successfully\n", q.Id)
+	fmt.Printf("Queue %s resumed successfully\n", q.Id)
 	go StartQueueDownloads(q)
 }
 
 func ScheduleQueueDownloads(q *Queue) {
 	now := time.Now()
-	if now.After(q.EndTime) {
-		fmt.Printf("Queue %s's end time has already passed\n", q.Id)
-		return
-	}
 	delay := q.StartTime.Sub(now)
 	if delay <= 0 {
 		StartQueueDownloads(q)
@@ -230,7 +263,6 @@ func ScheduleQueueDownloads(q *Queue) {
 		})
 	}
 }
-
 func ListQueues() {
 	fmt.Println("\n----- Available QueuesList -----")
 	if len(QueuesList) == 0 {
@@ -248,7 +280,6 @@ func ListQueues() {
 		fmt.Println("-------------------------------")
 	}
 }
-
 func DeleteQueue(queueName string) []*Queue {
 	newDownloads := make([]*Download, 0)
 	for _, dl := range DownloadsList {
