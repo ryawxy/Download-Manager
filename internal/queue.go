@@ -13,11 +13,17 @@ type Queue struct {
 	Id                     string       `json:"id"`
 	Downloads              []*Download  `json:"downloads"`
 	Directory              string       `json:"directory"`
+	DirectorySet           bool         `json:"directory_set"`
 	BandwidthLimit         int          `json:"bandwidth_limit"`
+	BandwidthSet           bool         `json:"bandwidth_set"`
 	NumberOfTriesLimit     int          `json:"number_of_tries_limit"`
+	RetriesSet             bool         `json:"retries_set"`
 	StartTime              time.Time    `json:"start_time"`
+	StartTimeSet           bool         `json:"start_time_set"`
 	EndTime                time.Time    `json:"end_time"`
+	EndTimeSet             bool         `json:"end_time_set"`
 	MaxConcurrentDownloads int          `json:"max_concurrent_downloads"`
+	MaxConcurrentSet       bool         `json:"max_concurrent_set"`
 	TokenBucket            *TokenBucket `json:"-"`
 	mutex                  sync.Mutex   `json:"-"`
 	CancelFunc             func()       `json:"-"`
@@ -29,19 +35,51 @@ var QueuesList = make(map[string]*Queue)
 func NewQueue(id, directory string, retriesLimit int, bandwidthLimit int,
 	maxConcurrent int, startTime, endTime time.Time) *Queue {
 
-	rate := time.Second / time.Duration(bandwidthLimit)
+	// invalid or duplicate name - only field which required here
+	if id == "" || QueuesList[id] != nil {
+		return nil
+	}
 
 	q := &Queue{
-		Id:                     id,
-		Downloads:              make([]*Download, 0),
-		Directory:              directory,
-		NumberOfTriesLimit:     retriesLimit,
-		BandwidthLimit:         bandwidthLimit,
-		MaxConcurrentDownloads: maxConcurrent,
-		StartTime:              startTime,
-		EndTime:                endTime,
-		TokenBucket:            NewTokenBucket(bandwidthLimit, rate),
+		Id:        id,
+		Downloads: make([]*Download, 0),
+		//Directory:              directory,
+		//NumberOfTriesLimit:     retriesLimit,
+		//BandwidthLimit:         bandwidthLimit,
+		//MaxConcurrentDownloads: maxConcurrent,
+		//StartTime:              startTime,
+		//EndTime:                endTime,
+		//TokenBucket:            NewTokenBucket(bandwidthLimit, rate),
 	}
+
+	// Set fields only if provided
+	if directory != "" {
+		q.Directory = directory
+		q.DirectorySet = true
+	}
+	if retriesLimit != 0 { // 0 means unset
+		q.NumberOfTriesLimit = retriesLimit
+		q.RetriesSet = true
+	}
+	if bandwidthLimit != 0 { // 0 means unset, no TokenBucket
+		q.BandwidthLimit = bandwidthLimit
+		q.BandwidthSet = true
+		rate := time.Second / time.Duration(bandwidthLimit)
+		q.TokenBucket = NewTokenBucket(bandwidthLimit, rate)
+	}
+	if maxConcurrent != 0 { // 0 means unset
+		q.MaxConcurrentDownloads = maxConcurrent
+		q.MaxConcurrentSet = true
+	}
+	if !startTime.IsZero() {
+		q.StartTime = startTime
+		q.StartTimeSet = true
+	}
+	if !endTime.IsZero() {
+		q.EndTime = endTime
+		q.EndTimeSet = true
+	}
+
 	QueuesList[id] = q
 	_ = SaveQueuesToFile()
 	return q

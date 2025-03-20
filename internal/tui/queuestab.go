@@ -55,21 +55,54 @@ func NewQueuesTab() *QueuesTab {
 }
 
 func (q QueuesTab) updateCurrentQueue() QueuesTab {
-	q.queues[q.queueCursor].Directory = q.inputs[0].Value()
-	q.queues[q.queueCursor].NumberOfTriesLimit, _ = strconv.Atoi(q.inputs[1].Value())
-	q.queues[q.queueCursor].BandwidthLimit, _ = strconv.Atoi(q.inputs[2].Value())
-	q.queues[q.queueCursor].MaxConcurrentDownloads, _ = strconv.Atoi(q.inputs[3].Value())
-	q.queues[q.queueCursor].StartTime, _ = time.Parse("2006-01-02 15:04:05", q.inputs[4].Value())
-	q.queues[q.queueCursor].EndTime, _ = time.Parse("2006-01-02 15:04:05", q.inputs[5].Value())
+	queue := &q.queues[q.queueCursor]
+	if q.inputs[0].Value() != "" {
+		queue.Directory = q.inputs[0].Value()
+		queue.DirectorySet = true
+	}
+	if q.inputs[1].Value() != "" {
+		if retries, err := strconv.Atoi(q.inputs[1].Value()); err == nil {
+			queue.NumberOfTriesLimit = retries
+			queue.RetriesSet = true
+		}
+	}
+	if q.inputs[2].Value() != "" {
+		if bwLimit, err := strconv.Atoi(q.inputs[2].Value()); err == nil {
+			queue.BandwidthLimit = bwLimit
+			queue.BandwidthSet = true
+			rate := time.Second / time.Duration(bwLimit)
+			queue.TokenBucket = internal.NewTokenBucket(bwLimit, rate)
+		}
+	}
+	if q.inputs[3].Value() != "" {
+		if maxConcurrent, err := strconv.Atoi(q.inputs[3].Value()); err == nil {
+			queue.MaxConcurrentDownloads = maxConcurrent
+			queue.MaxConcurrentSet = true
+		}
+	}
+	if q.inputs[4].Value() != "" {
+		if t, err := time.Parse("15:04", q.inputs[4].Value()); err == nil {
+			now := time.Now()
+			queue.StartTime = time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, now.Location())
+			queue.StartTimeSet = true
+		}
+	}
+	if q.inputs[5].Value() != "" {
+		if t, err := time.Parse("15:04", q.inputs[5].Value()); err == nil {
+			now := time.Now()
+			queue.EndTime = time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, now.Location())
+			queue.EndTimeSet = true
+		}
+	}
 
-	internalQueue := internal.QueuesList[q.queues[q.queueCursor].Id]
+	internalQueue := internal.QueuesList[queue.Id]
 	internalQueue.EditQueue(
-		q.queues[q.queueCursor].Directory,
-		q.queues[q.queueCursor].NumberOfTriesLimit,
-		q.queues[q.queueCursor].MaxConcurrentDownloads,
-		q.queues[q.queueCursor].StartTime,
-		q.queues[q.queueCursor].EndTime,
-		q.queues[q.queueCursor].BandwidthLimit,
+		queue.Directory,
+		queue.NumberOfTriesLimit,
+		queue.MaxConcurrentDownloads,
+		queue.StartTime,
+		queue.EndTime,
+		queue.BandwidthLimit,
 	)
 	return q
 }
@@ -78,18 +111,50 @@ func (q *QueuesTab) setInputs() {
 	if len(q.queues) == 0 {
 		return
 	}
-	q.inputs[0].SetValue(q.queues[q.queueCursor].Directory)
-	q.inputs[0].CursorEnd()
-	q.inputs[1].SetValue(strconv.Itoa(q.queues[q.queueCursor].NumberOfTriesLimit))
-	q.inputs[1].CursorEnd()
-	q.inputs[2].SetValue(strconv.Itoa(q.queues[q.queueCursor].BandwidthLimit))
-	q.inputs[2].CursorEnd()
-	q.inputs[3].SetValue(strconv.Itoa(q.queues[q.queueCursor].MaxConcurrentDownloads))
-	q.inputs[3].CursorEnd()
-	q.inputs[4].SetValue(q.queues[q.queueCursor].StartTime.Format("2006-01-02 15:04:05"))
-	q.inputs[4].CursorEnd()
-	q.inputs[5].SetValue(q.queues[q.queueCursor].EndTime.Format("2006-01-02 15:04:05"))
-	q.inputs[5].CursorEnd()
+
+	queue := q.queues[q.queueCursor]
+	if queue.DirectorySet {
+		q.inputs[0].SetValue(queue.Directory)
+	} else {
+		q.inputs[0].SetValue("")
+	}
+	if queue.RetriesSet {
+		q.inputs[1].SetValue(strconv.Itoa(queue.NumberOfTriesLimit))
+	} else {
+		q.inputs[1].SetValue("")
+	}
+	if queue.BandwidthSet {
+		q.inputs[2].SetValue(strconv.Itoa(queue.BandwidthLimit))
+	} else {
+		q.inputs[2].SetValue("")
+	}
+	if queue.MaxConcurrentSet {
+		q.inputs[3].SetValue(strconv.Itoa(queue.MaxConcurrentDownloads))
+	} else {
+		q.inputs[3].SetValue("")
+	}
+	if queue.StartTimeSet {
+		q.inputs[4].SetValue(queue.StartTime.Format("15:04"))
+	} else {
+		q.inputs[4].SetValue("")
+	}
+	if queue.EndTimeSet {
+		q.inputs[5].SetValue(queue.EndTime.Format("15:04"))
+	} else {
+		q.inputs[5].SetValue("")
+	}
+	//q.inputs[0].SetValue(q.queues[q.queueCursor].Directory)
+	//q.inputs[0].CursorEnd()
+	//q.inputs[1].SetValue(strconv.Itoa(q.queues[q.queueCursor].NumberOfTriesLimit))
+	//q.inputs[1].CursorEnd()
+	//q.inputs[2].SetValue(strconv.Itoa(q.queues[q.queueCursor].BandwidthLimit))
+	//q.inputs[2].CursorEnd()
+	//q.inputs[3].SetValue(strconv.Itoa(q.queues[q.queueCursor].MaxConcurrentDownloads))
+	//q.inputs[3].CursorEnd()
+	//q.inputs[4].SetValue(q.queues[q.queueCursor].StartTime.Format("2006-01-02 15:04:05"))
+	//q.inputs[4].CursorEnd()
+	//q.inputs[5].SetValue(q.queues[q.queueCursor].EndTime.Format("2006-01-02 15:04:05"))
+	//q.inputs[5].CursorEnd()
 }
 
 func (q *QueuesTab) deleteQueue() {
@@ -232,33 +297,78 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if q.buttonsCursor != -1 {
 					if q.buttonsCursor%2 == 0 {
 						id := q.inputs[0].Value()
-						directory := q.inputs[1].Value()
-						retries, _ := strconv.Atoi(q.inputs[2].Value())
-						bwLimit, _ := strconv.Atoi(q.inputs[3].Value())
-						maxconcurrent, _ := strconv.Atoi(q.inputs[4].Value())
-						startTime, _ := time.Parse("15:04", q.inputs[5].Value())
-						endTime, _ := time.Parse("15:04", q.inputs[6].Value())
-						now := time.Now()
-						startTime = time.Date(now.Year(), now.Month(), now.Day(), startTime.Hour(), startTime.Minute(), 0, 0, now.Location())
-						endTime = time.Date(now.Year(), now.Month(), now.Day(), endTime.Hour(), endTime.Minute(), 0, 0, now.Location())
+						if id == "" {
+							q.creatingNewQueue = false
+							return q, nil
+						}
 
-						newQueue := internal.NewQueue(
-							id,
-							directory,
-							retries,
-							bwLimit,
-							maxconcurrent,
-							startTime,
-							endTime,
-						)
-						newQueue.NumberOfTriesLimit = retries
-						newQueue.BandwidthLimit = bwLimit
-						newQueue.MaxConcurrentDownloads = maxconcurrent
-						q.queues = append(q.queues, *newQueue)
-						q.creatingNewQueue = false
-						q.controlContent = false
-						q.queueCursor = len(q.queues) - 1
-						q.setInputs()
+						directory := q.inputs[1].Value()
+						retriesStr := q.inputs[2].Value()
+						bwLimitStr := q.inputs[3].Value()
+						maxConcurrentStr := q.inputs[4].Value()
+						startTimeStr := q.inputs[5].Value()
+						endTimeStr := q.inputs[6].Value()
+						// Parse only if provided
+						retries := 0
+						if retriesStr != "" {
+							retries, _ = strconv.Atoi(retriesStr)
+						}
+						bwLimit := 0
+						if bwLimitStr != "" {
+							bwLimit, _ = strconv.Atoi(bwLimitStr)
+						}
+						maxConcurrent := 0
+						if maxConcurrentStr != "" {
+							maxConcurrent, _ = strconv.Atoi(maxConcurrentStr)
+						}
+						var startTime, endTime time.Time
+						now := time.Now()
+						if startTimeStr != "" {
+							if t, err := time.Parse("15:04", startTimeStr); err == nil {
+								startTime = time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, now.Location())
+							}
+						}
+						if endTimeStr != "" {
+							if t, err := time.Parse("15:04", endTimeStr); err == nil {
+								endTime = time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, now.Location())
+							}
+						}
+
+						newQueue := internal.NewQueue(id, directory, retries, bwLimit, maxConcurrent, startTime, endTime)
+						if newQueue != nil {
+							q.queues = append(q.queues, *newQueue)
+							q.creatingNewQueue = false
+							q.controlContent = false
+							q.queueCursor = len(q.queues) - 1
+							q.setInputs()
+						}
+						//directory := q.inputs[1].Value()
+						//retries, _ := strconv.Atoi(q.inputs[2].Value())
+						//bwLimit, _ := strconv.Atoi(q.inputs[3].Value())
+						//maxconcurrent, _ := strconv.Atoi(q.inputs[4].Value())
+						//startTime, _ := time.Parse("15:04", q.inputs[5].Value())
+						//endTime, _ := time.Parse("15:04", q.inputs[6].Value())
+						//now := time.Now()
+						//startTime = time.Date(now.Year(), now.Month(), now.Day(), startTime.Hour(), startTime.Minute(), 0, 0, now.Location())
+						//endTime = time.Date(now.Year(), now.Month(), now.Day(), endTime.Hour(), endTime.Minute(), 0, 0, now.Location())
+
+						//newQueue := internal.NewQueue(
+						//	id,
+						//	directory,
+						//	retries,
+						//	bwLimit,
+						//	maxconcurrent,
+						//	startTime,
+						//	endTime,
+						//)
+						//newQueue.NumberOfTriesLimit = retries
+						//newQueue.BandwidthLimit = bwLimit
+						//newQueue.MaxConcurrentDownloads = maxconcurrent
+						//q.queues = append(q.queues, *newQueue)
+						//q.creatingNewQueue = false
+						//q.controlContent = false
+						//q.queueCursor = len(q.queues) - 1
+						//q.setInputs()
 					} else {
 						q.creatingNewQueue = false
 					}
@@ -330,13 +440,55 @@ func (q *QueuesTab) View() string {
 	}
 	labels := []string{"Directory", "Retries Limit", "Bandwidth Limit", "Max Concurrent Files Limit", "Start Time", "End Time"}
 	for i, label := range labels {
+		var value string
+		queue := q.queues[q.queueCursor]
+		switch i {
+		case 0:
+			if queue.DirectorySet {
+				value = queue.Directory
+			} else {
+				value = ""
+			}
+		case 1:
+			if queue.RetriesSet {
+				value = strconv.Itoa(queue.NumberOfTriesLimit)
+			} else {
+				value = ""
+			}
+		case 2:
+			if queue.BandwidthSet {
+				value = strconv.Itoa(queue.BandwidthLimit)
+			} else {
+				value = ""
+			}
+		case 3:
+			if queue.MaxConcurrentSet {
+				value = strconv.Itoa(queue.MaxConcurrentDownloads)
+			} else {
+				value = ""
+			}
+		case 4:
+			if queue.StartTimeSet {
+				value = queue.StartTime.Format("15:04")
+			} else {
+				value = ""
+			}
+		case 5:
+			if queue.EndTimeSet {
+				value = queue.EndTime.Format("15:04")
+			} else {
+				value = ""
+			}
+		}
+
 		if q.controlContent && q.contentCursor == i {
 			queueContent += selectedStyle.Render(label+": "+q.inputs[i].View()) + "\n"
 			q.inputs[i].Focus()
 		} else {
-			queueContent += style.Render(label+": "+q.inputs[i].View()) + "\n"
+			queueContent += style.Render(label+": "+value) + "\n"
 		}
 	}
+
 	stateButton := "[State]"
 	deleteButton := "[Delete]"
 	currentQueue := q.queues[q.queueCursor]
