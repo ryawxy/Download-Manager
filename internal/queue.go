@@ -22,6 +22,7 @@ type Queue struct {
 	mutex                  sync.Mutex   `json:"-"`
 	CancelFunc             func()       `json:"-"`
 	Paused                 bool         `json:"paused"`
+	HasStarted             bool         `json:"has_started"`
 }
 
 var QueuesList = make(map[string]*Queue)
@@ -41,6 +42,7 @@ func NewQueue(id, directory string, retriesLimit int, bandwidthLimit int,
 		StartTime:              startTime,
 		EndTime:                endTime,
 		TokenBucket:            NewTokenBucket(bandwidthLimit, rate),
+		HasStarted:             false,
 	}
 	QueuesList[id] = q
 	_ = SaveQueuesToFile()
@@ -53,6 +55,7 @@ func (q *Queue) StopDownloads() {
 		fmt.Println("Downloads in queue", q.Id, "stopped due to end time.")
 	}
 }
+
 func (q *Queue) EditQueue(directory string, retriesLimit, maxConcurrent int, startTime, endTime time.Time, bandwidthLimit int) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
@@ -75,17 +78,9 @@ func (q *Queue) EditQueue(directory string, retriesLimit, maxConcurrent int, sta
 func (q *Queue) AddDownload(d *Download) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
+	d.QueueName = q.Id
 	q.Downloads = append(q.Downloads, d)
 	SaveQueuesToFile()
-
-	//for _, queue := range QueuesList {
-	//	if queue.Id == q.Id {
-	//		d.Status = Pending
-	//		q.Downloads = append(q.Downloads, d)
-	//		_ = SaveQueuesToFile()
-	//	}
-	//}
-
 	return nil
 }
 
@@ -93,7 +88,6 @@ func (q *Queue) RemoveDownload(name string) error {
 	q.mutex.Lock()
 	defer q.mutex.Unlock()
 
-	// Find and remove from this queue
 	for i, d := range q.Downloads {
 		if d.FileName == name {
 			q.Downloads = append(q.Downloads[:i], q.Downloads[i+1:]...)
@@ -101,10 +95,7 @@ func (q *Queue) RemoveDownload(name string) error {
 
 			for j, globalDL := range DownloadsList {
 				if globalDL.FileName == name {
-					DownloadsList = append(
-						DownloadsList[:j],
-						DownloadsList[j+1:]...,
-					)
+					DownloadsList = append(DownloadsList[:j], DownloadsList[j+1:]...)
 					break
 				}
 			}
@@ -116,6 +107,7 @@ func (q *Queue) RemoveDownload(name string) error {
 
 func StartQueueDownloads(q *Queue) {
 	q.mutex.Lock()
+	q.HasStarted = true
 	if q.Paused {
 		fmt.Printf("Queue %s is paused. Downloads won't start\n", q.Id)
 		q.mutex.Unlock()
@@ -123,15 +115,26 @@ func StartQueueDownloads(q *Queue) {
 	}
 	q.mutex.Unlock()
 
+	now := time.Now()
+	if now.Before(q.StartTime) {
+		fmt.Printf("Queue %s hasn't started yet (starts at %s)\n", q.Id, q.StartTime.Format("2006-01-02 15:04"))
+		return
+	}
+	if now.After(q.EndTime) {
+		fmt.Printf("Queue %s has already ended (ended at %s)\n", q.Id, q.EndTime.Format("2006-01-02 15:04"))
+		return
+	}
+
 	fmt.Println("Starting downloads in queue:", q.Id)
 	sem := make(chan struct{}, q.MaxConcurrentDownloads)
 	var wg sync.WaitGroup
 	ctx, cancel := context.WithCancel(context.Background())
 	q.CancelFunc = cancel
 
-	time.AfterFunc(time.Until(q.EndTime), func() {
-		q.StopDownloads()
-	})
+	stopDelay := time.Until(q.EndTime)
+	if stopDelay > 0 {
+		time.AfterFunc(stopDelay, q.StopDownloads)
+	}
 
 	for _, d := range q.Downloads {
 		wg.Add(1)
@@ -185,16 +188,16 @@ func (q *Queue) PauseQueue() {
 	defer q.mutex.Unlock()
 
 	if q.Paused {
-		fmt.Println("Queue is already paused")
+		//	fmt.Println("Queue is already paused")
 		return
 	}
 
 	q.Paused = true
 	if q.CancelFunc != nil {
-		q.CancelFunc() // it will cancel all ongoing downloads
+		q.CancelFunc()
 	}
 
-	fmt.Printf("Queue %s paused successfully\n", q.Id)
+	//	fmt.Printf("Queue %s paused successfully\n", q.Id)
 }
 
 func (q *Queue) ResumeQueue() {
@@ -202,17 +205,21 @@ func (q *Queue) ResumeQueue() {
 	defer q.mutex.Unlock()
 
 	if !q.Paused {
-		fmt.Println("Queue is already running")
+		//	fmt.Println("Queue is already running")
 		return
 	}
 
 	q.Paused = false
-	fmt.Printf("Queue %s resumed successfully\n", q.Id)
+	//	fmt.Printf("Queue %s resumed successfully\n", q.Id)
 	go StartQueueDownloads(q)
 }
 
 func ScheduleQueueDownloads(q *Queue) {
 	now := time.Now()
+	if now.After(q.EndTime) {
+		fmt.Printf("Queue %s's end time has already passed\n", q.Id)
+		return
+	}
 	delay := q.StartTime.Sub(now)
 	if delay <= 0 {
 		StartQueueDownloads(q)
@@ -223,6 +230,7 @@ func ScheduleQueueDownloads(q *Queue) {
 		})
 	}
 }
+
 func ListQueues() {
 	fmt.Println("\n----- Available QueuesList -----")
 	if len(QueuesList) == 0 {
@@ -240,7 +248,8 @@ func ListQueues() {
 		fmt.Println("-------------------------------")
 	}
 }
-func DeleteQueue(queueName string) []Queue {
+
+func DeleteQueue(queueName string) []*Queue {
 	newDownloads := make([]*Download, 0)
 	for _, dl := range DownloadsList {
 		if dl.QueueName != queueName {
@@ -253,9 +262,9 @@ func DeleteQueue(queueName string) []Queue {
 	_ = SaveQueuesToFile()
 	fmt.Println("Queue", queueName, "deleted successfully.")
 
-	var updatedQueues []Queue
+	var updatedQueues []*Queue
 	for _, q := range QueuesList {
-		updatedQueues = append(updatedQueues, *q)
+		updatedQueues = append(updatedQueues, q)
 	}
 	return updatedQueues
 }

@@ -26,7 +26,7 @@ type MainStage struct {
 func NewMainStage() MainStage {
 	return MainStage{
 		height:     20,
-		width:      100,
+		width:      200,
 		currentTab: 0,
 		tabs:       append([]Tab{}, NewNewDownloadTab(), NewDownloadsTab(), NewQueuesTab()),
 	}

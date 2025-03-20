@@ -15,18 +15,18 @@ import (
 type exitQueuesMsg struct{}
 
 type QueuesTab struct {
-	queues           []internal.Queue
+	queues           []*internal.Queue
 	queueCursor      int
 	contentCursor    int
-	buttonsCursor    int
+	buttonsCursor    int // 0 = state control, 1 = delete
 	isActive         bool
 	controlContent   bool
 	creatingNewQueue bool
 	inputs           []textinput.Model
 }
 
-func temporaryRandomQueues() []internal.Queue {
-	return []internal.Queue{
+func temporaryRandomQueues() []*internal.Queue {
+	return []*internal.Queue{
 		{Id: "queue1", Directory: "Downloads/queue1", MaxConcurrentDownloads: 5, BandwidthLimit: 1000, NumberOfTriesLimit: 3, StartTime: time.Now(), EndTime: time.Now().Add(2 * time.Hour)},
 		{Id: "queue2", Directory: "Downloads/queue2", MaxConcurrentDownloads: 10, BandwidthLimit: 2000, NumberOfTriesLimit: 2, StartTime: time.Now(), EndTime: time.Now().Add(3 * time.Hour)},
 		{Id: "queue3", Directory: "Downloads/queue3", MaxConcurrentDownloads: 7, BandwidthLimit: 1500, NumberOfTriesLimit: 4, StartTime: time.Now(), EndTime: time.Now().Add(1 * time.Hour)},
@@ -189,10 +189,11 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				q.buttonsCursor = -1
 			case "enter":
 				if q.buttonsCursor != -1 {
+					// Button mode: 0 = state control; 1 = delete.
 					if q.buttonsCursor == 0 {
 						currentQueue := q.queues[q.queueCursor]
-						if currentQueue.CancelFunc == nil {
-							go internal.ScheduleQueueDownloads(&currentQueue)
+						if !currentQueue.HasStarted {
+							go internal.ScheduleQueueDownloads(currentQueue)
 						} else if currentQueue.Paused {
 							go currentQueue.ResumeQueue()
 						} else {
@@ -251,10 +252,7 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							startTime,
 							endTime,
 						)
-						newQueue.NumberOfTriesLimit = retries
-						newQueue.BandwidthLimit = bwLimit
-						newQueue.MaxConcurrentDownloads = maxconcurrent
-						q.queues = append(q.queues, *newQueue)
+						q.queues = append(q.queues, newQueue)
 						q.creatingNewQueue = false
 						q.controlContent = false
 						q.queueCursor = len(q.queues) - 1
@@ -273,9 +271,9 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case tickMsg:
-		var sortedQueues []internal.Queue
+		var sortedQueues []*internal.Queue
 		for _, queue := range internal.QueuesList {
-			sortedQueues = append(sortedQueues, *queue)
+			sortedQueues = append(sortedQueues, queue)
 		}
 		sort.Slice(sortedQueues, func(i, j int) bool {
 			return sortedQueues[i].Id < sortedQueues[j].Id
@@ -340,7 +338,7 @@ func (q *QueuesTab) View() string {
 	stateButton := "[State]"
 	deleteButton := "[Delete]"
 	currentQueue := q.queues[q.queueCursor]
-	if currentQueue.CancelFunc == nil {
+	if !currentQueue.HasStarted {
 		stateButton = "[Start]"
 	} else if currentQueue.Paused {
 		stateButton = "[Resume]"

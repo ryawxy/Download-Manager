@@ -28,7 +28,7 @@ type ProgressMsg struct {
 }
 
 var workers = 3
-var WORKERS = 6
+var WORKERS = 4
 
 func (download *Download) NewDownloadManager(workers int, tb *TokenBucket) *DownloadManager {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -47,7 +47,6 @@ func getFileNameFromHeader(resp *http.Response) (string, bool) {
 		return "", false // it means server didn't send any contentDisp
 	}
 
-	// it returns the media type automatically!
 	_, params, err := mime.ParseMediaType(contentDisp)
 	if err != nil {
 		return "", false
@@ -100,48 +99,54 @@ func (download *Download) GetFileSizeAndName() error {
 
 	return nil
 }
-
 func (download *Download) downloadChunk(start int64, end int64, partNum int, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	download.StartTime = time.Now()
-	req, err := http.NewRequestWithContext(download.Manager.Ctx, "GET", download.URL, nil)
-	if err != nil {
-		fmt.Println("Error creating request:", err)
-		return
-	}
-
-	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		fmt.Println("Error during download:", err)
-		return
-	}
-
-	encoding := resp.Header.Get("Content-Encoding")
-	if encoding == "gzip" {
-		fmt.Println("Warning: Server is compressing the response, decoding needed!")
-	}
-
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusPartialContent && start != 0 {
-		fmt.Println("Warning: Server does not support partial content properly.")
-	}
-
 	partFileName := fmt.Sprintf("%s.part%d", download.FileName, partNum)
 	fullPath := filepath.Join(download.Directory, partFileName)
-	file, err := os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY, 0644)
+
+	// Open file in append mode to resume partial downloads
+	file, err := os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		fmt.Println("Error creating part file:", err)
 		return
 	}
 	defer file.Close()
 
-	buf := make([]byte, 1024)
-	totalBytesRead := int64(0)
+	// Get current file size to determine resume position
+	fileInfo, _ := file.Stat()
+	currentOffset := fileInfo.Size()
+	totalBytesRead := currentOffset // Start counting from existing bytes
+
+	// Don't download if we've already completed this chunk
+	if totalBytesRead >= (end - start + 1) {
+		return
+	}
+
+	req, err := http.NewRequestWithContext(download.Manager.Ctx, "GET", download.URL, nil)
+	if err != nil {
+		fmt.Println("Error creating request:", err)
+		return
+	}
+
+	// Adjust the range to resume from the correct position
+	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start+currentOffset, end))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fmt.Println("Error during download:", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusPartialContent && start != 0 {
+		fmt.Println("Warning: Server does not support partial content properly.")
+		return
+	}
+
+	buf := make([]byte, 1024*8) // Increased buffer size for better performance
 
 	for {
+		// Handle pause state
 		download.Manager.Mutex.Lock()
 		for download.Paused {
 			download.Manager.Mutex.Unlock()
@@ -158,32 +163,41 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 
 		n, err := resp.Body.Read(buf)
 		if n > 0 {
-			remaining := end - start + 1 - totalBytesRead
+			// Calculate remaining bytes for this chunk
+			remaining := end - start - totalBytesRead + 1
+			if remaining <= 0 {
+				break
+			}
 			if int64(n) > remaining {
 				n = int(remaining)
 			}
 
+			// Rate limiting
 			if download.Manager.TokenBucket != nil {
 				download.Manager.TokenBucket.WaitAndTake(n)
 			}
 
+			// Write to file
 			_, writeErr := file.Write(buf[:n])
 			if writeErr != nil {
-				//	fmt.Println("Error writing to part file:", writeErr)
+				fmt.Println("Error writing to part file:", writeErr)
 				return
 			}
 
+			// Update progress
 			download.Manager.Mutex.Lock()
 			download.DownloadedBytes += int64(n)
 			percentage := float64(download.DownloadedBytes) / float64(download.FileSize) * 100
 			download.Progress = int64(percentage)
 			download.Manager.Mutex.Unlock()
 
+			// Send progress update
 			cmd := func() tea.Msg {
 				return ProgressMsg{Download: download}
 			}
 			tea.Println(cmd)
 
+			// Update state
 			download.ShowProgress()
 			download.changeDownloadStatus()
 			SaveQueuesToFile()
@@ -207,11 +221,11 @@ func (download *Download) StartDownload() error {
 
 	download.StartTime = time.Now()
 	if !download.CheckRangeSupport() {
-		fmt.Println("Server does NOT support partial downloads. Switching to single-threaded mode...")
+		//	fmt.Println("Server does NOT support partial downloads. Switching to single-threaded mode...")
 		download.Manager.Workers = 1
 		download.Manager.ChunkSize = download.FileSize
 	} else {
-		fmt.Println("Server supports partial downloads. Using multi-threaded mode.")
+		//	fmt.Println("Server supports partial downloads. Using multi-threaded mode.")
 	}
 
 	if err := os.MkdirAll(download.Directory, 0755); err != nil {
@@ -256,13 +270,13 @@ func mergeFiles(download *Download) error {
 	}
 	defer outputFile.Close()
 
-	fmt.Println("merging downloaded parts...")
+	//	fmt.Println("merging downloaded parts...")
 
 	for i := 0; i < download.Manager.Workers; i++ {
 		partPath := filepath.Join(download.Directory, fmt.Sprintf("%s.part%d", download.FileName, i))
 
 		if _, err := os.Stat(partPath); os.IsNotExist(err) {
-			fmt.Printf("Warning: Part %d is missing, skipping...\n", i)
+			//		fmt.Printf("Warning: Part %d is missing, skipping...\n", i)
 			continue
 		}
 
@@ -274,7 +288,7 @@ func mergeFiles(download *Download) error {
 		_, err = io.Copy(outputFile, partFile)
 		if err != nil {
 			partFile.Close()
-			fmt.Printf("Error copying part %d: %v\n", i, err)
+			//		fmt.Printf("Error copying part %d: %v\n", i, err)
 			return err
 		}
 		partFile.Close()
@@ -295,6 +309,10 @@ func (download *Download) CancelDownload() {
 func (download *Download) changeDownloadStatus() {
 	download.Manager.Mutex.Lock()
 	defer download.Manager.Mutex.Unlock()
+
+	if download.Status == Paused {
+		return
+	}
 
 	if download.Progress == 0 {
 		download.Status = Pending
@@ -355,7 +373,6 @@ func (download *Download) PauseDownload() {
 	defer download.Manager.Mutex.Unlock()
 	download.Paused = true
 	download.Status = Paused
-	fmt.Printf("Paused download: %s\n", download.FileName)
 }
 
 func (download *Download) ResumeDownload() {
@@ -363,8 +380,7 @@ func (download *Download) ResumeDownload() {
 	defer download.Manager.Mutex.Unlock()
 	download.Paused = false
 	download.Status = InProgress
-	go download.StartDownload()
-	fmt.Printf("Resumed download: %s\n", download.FileName)
+	// Removed: go download.StartDownload()
 }
 
 func (download *Download) CheckRangeSupport() bool {
