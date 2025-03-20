@@ -108,7 +108,7 @@ func (q *Queue) EditQueue(directory string, retriesLimit, maxConcurrent int, sta
 	q.TokenBucket = NewTokenBucket(bandwidthLimit, rate)
 
 	_ = SaveQueuesToFile()
-	fmt.Println("Queue", q.Id, "updated successfully.")
+	//fmt.Println("Queue", q.Id, "updated successfully.")
 	return nil
 }
 
@@ -157,9 +157,9 @@ func StartQueueDownloads(q *Queue) {
 	q.mutex.Lock()
 	q.HasStarted = true
 	if q.Paused {
-		fmt.Printf("Queue %s is paused. Downloads won't start\n", q.Id)
+		fmt.Printf("Queue %s is paused. Downloads will wait until resumed.\n", q.Id)
 		q.mutex.Unlock()
-		return
+		return // Let ResumeQueue handle continuation
 	}
 	q.mutex.Unlock()
 
@@ -179,31 +179,20 @@ func StartQueueDownloads(q *Queue) {
 
 		go func(d *Download, dir string, tb *TokenBucket) {
 			defer wg.Done()
-
-			q.mutex.Lock()
-			if q.Paused {
-				fmt.Println("Queue is paused, stopping download:", d.FileName)
-				q.mutex.Unlock()
-				<-sem
-				return
-			}
-			q.mutex.Unlock()
+			defer func() { <-sem }()
 
 			d.NewDownloadManager(workers, tb)
 			d.Manager.Ctx = ctx
-
 			d.Directory = dir
 
 			if err := os.MkdirAll(dir, 0755); err != nil {
 				fmt.Println("Error creating directory:", err)
-				<-sem
 				return
 			}
 
 			err := d.GetFileSizeAndName()
 			if err != nil {
 				fmt.Printf("Error getting file info for %s: %v\n", d.URL, err)
-				<-sem
 				return
 			}
 
@@ -211,8 +200,6 @@ func StartQueueDownloads(q *Queue) {
 			if err := d.StartDownload(); err != nil {
 				fmt.Println("Error:", err)
 			}
-
-			<-sem
 		}(d, q.Directory, q.TokenBucket)
 	}
 
@@ -230,8 +217,8 @@ func (q *Queue) PauseQueue() {
 	}
 
 	q.Paused = true
-	if q.CancelFunc != nil {
-		q.CancelFunc() // it will cancel all ongoing downloads
+	for _, d := range q.Downloads {
+		d.PauseDownload()
 	}
 
 	fmt.Printf("Queue %s paused successfully\n", q.Id)
@@ -247,8 +234,13 @@ func (q *Queue) ResumeQueue() {
 	}
 
 	q.Paused = false
+	for _, d := range q.Downloads {
+		if d.Paused && d.Progress < 100 {
+			d.ResumeDownload()
+		}
+	}
+
 	fmt.Printf("Queue %s resumed successfully\n", q.Id)
-	go StartQueueDownloads(q)
 }
 
 func ScheduleQueueDownloads(q *Queue) {

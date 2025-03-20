@@ -398,9 +398,11 @@ func (download *Download) Retry(queue *Queue) error {
 func (download *Download) PauseDownload() {
 	download.Manager.Mutex.Lock()
 	defer download.Manager.Mutex.Unlock()
-	download.Paused = true
-	download.Status = Paused
-	fmt.Printf("Paused download: %s\n", download.FileName)
+	if download.Progress < 100 {
+		download.Paused = true
+		download.Status = Paused
+		fmt.Printf("Paused download: %s\n", download.FileName)
+	}
 }
 
 func (download *Download) ResumeDownload() {

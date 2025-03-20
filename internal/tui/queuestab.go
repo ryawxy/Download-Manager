@@ -15,7 +15,7 @@ import (
 type exitQueuesMsg struct{}
 type QueueActionMsg struct {
 	QueueID string
-	Action  string // "scheduled", "started", "cannot_start"
+	Action  string
 	Message string
 }
 
@@ -80,6 +80,7 @@ func NewQueuesTab() *QueuesTab {
 		inputs[i] = textinput.New()
 		inputs[i].Placeholder = ""
 		inputs[i].Prompt = ""
+
 	}
 	tab := &QueuesTab{
 		queues:           queues,
@@ -99,8 +100,23 @@ func (q QueuesTab) updateCurrentQueue() QueuesTab {
 	q.queues[q.queueCursor].NumberOfTriesLimit, _ = strconv.Atoi(q.inputs[1].Value())
 	q.queues[q.queueCursor].BandwidthLimit, _ = strconv.Atoi(q.inputs[2].Value())
 	q.queues[q.queueCursor].MaxConcurrentDownloads, _ = strconv.Atoi(q.inputs[3].Value())
-	q.queues[q.queueCursor].StartTime, _ = time.Parse("2006-01-02 15:04:05", q.inputs[4].Value())
-	q.queues[q.queueCursor].EndTime, _ = time.Parse("2006-01-02 15:04:05", q.inputs[5].Value())
+
+	now := time.Now()
+	startTime, err := time.Parse("15:04", q.inputs[4].Value())
+	if err == nil {
+		q.queues[q.queueCursor].StartTime = time.Date(
+			now.Year(), now.Month(), now.Day(),
+			startTime.Hour(), startTime.Minute(), 0, 0, now.Location(),
+		)
+	}
+
+	endTime, err := time.Parse("15:04", q.inputs[5].Value())
+	if err == nil {
+		q.queues[q.queueCursor].EndTime = time.Date(
+			now.Year(), now.Month(), now.Day(),
+			endTime.Hour(), endTime.Minute(), 0, 0, now.Location(),
+		)
+	}
 
 	internalQueue := internal.QueuesList[q.queues[q.queueCursor].Id]
 	internalQueue.EditQueue(
@@ -126,9 +142,9 @@ func (q *QueuesTab) setInputs() {
 	q.inputs[2].CursorEnd()
 	q.inputs[3].SetValue(strconv.Itoa(q.queues[q.queueCursor].MaxConcurrentDownloads))
 	q.inputs[3].CursorEnd()
-	q.inputs[4].SetValue(q.queues[q.queueCursor].StartTime.Format("2006-01-02 15:04:05"))
+	q.inputs[4].SetValue(q.queues[q.queueCursor].StartTime.Format("15:04"))
 	q.inputs[4].CursorEnd()
-	q.inputs[5].SetValue(q.queues[q.queueCursor].EndTime.Format("2006-01-02 15:04:05"))
+	q.inputs[5].SetValue(q.queues[q.queueCursor].EndTime.Format("15:04"))
 	q.inputs[5].CursorEnd()
 }
 
@@ -173,7 +189,6 @@ func (q *QueuesTab) toString() string {
 func (q *QueuesTab) Init() tea.Cmd {
 	return nil
 }
-
 func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -229,6 +244,7 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				q.buttonsCursor = -1
 			case "enter":
 				if q.buttonsCursor != -1 {
+					// Button mode: 0 = state control; 1 = delete.
 					if q.buttonsCursor == 0 {
 						currentQueue := q.queues[q.queueCursor]
 						if !currentQueue.HasStarted {
@@ -291,9 +307,6 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							startTime,
 							endTime,
 						)
-						newQueue.NumberOfTriesLimit = retries
-						newQueue.BandwidthLimit = bwLimit
-						newQueue.MaxConcurrentDownloads = maxconcurrent
 						q.queues = append(q.queues, newQueue)
 						q.creatingNewQueue = false
 						q.controlContent = false
@@ -321,7 +334,8 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return sortedQueues[i].Id < sortedQueues[j].Id
 		})
 		q.queues = sortedQueues
-		if !q.creatingNewQueue && len(q.queues) > 0 {
+		// Only update inputs if not currently editing.
+		if !q.creatingNewQueue && !q.controlContent && len(q.queues) > 0 {
 			if q.queueCursor >= len(q.queues) {
 				q.queueCursor = 0
 			}
@@ -331,12 +345,13 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case QueueActionMsg:
 		q.message = msg.Message
-		return q, tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+		return q, tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
 			return clearMessageMsg{}
 		})
-		//case clearMessageMsg:
-		//	q.message = ""
-		//	return q, nil
+
+	case clearMessageMsg:
+		q.message = " "
+		return q, nil
 	}
 	return q, nil
 }
@@ -345,6 +360,7 @@ var (
 	style              = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	queueSelectedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#00CC99"))
 	selectedStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#18FFFF")).Bold(true)
+	messageStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#e38686"))
 )
 
 func (q *QueuesTab) View() string {
@@ -410,6 +426,10 @@ func (q *QueuesTab) View() string {
 	queueContent += "\n" + buttonsLine + "\n"
 
 	footer := "Press 'n' for New Queue | '→' to edit fields | '←' to go back | '↑/↓' to navigate | 'Enter' to select"
+	if q.message != "" {
+		message := messageStyle.Render(q.message)
+		return lipgloss.JoinHorizontal(lipgloss.Top, queueList, queueContent) + "\n" + "\n" + message + "\n" + footer
+	}
 	return lipgloss.JoinHorizontal(lipgloss.Top, queueList, "   ", queueContent) + "\n" + footer
 }
 
