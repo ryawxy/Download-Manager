@@ -23,7 +23,9 @@ type Download struct {
 	StartTime       time.Time
 	Manager         *DownloadManager `json:"-"`
 	Paused          bool
-	DownloadedBytes int64  `json:"downloaded_bytes"`
-	Directory       string `json:"directory"`
-	QueueName       string `json:"queue_name"`
+	DownloadedBytes int64     `json:"downloaded_bytes"`
+	Directory       string    `json:"directory"`
+	QueueName       string    `json:"queue_name"`
+	LastUpdateTime  time.Time // Last time we update speed
+	Speed           float64   // Speed in bytes per second
 }

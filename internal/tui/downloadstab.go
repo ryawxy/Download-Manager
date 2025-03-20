@@ -39,7 +39,7 @@ var (
 				Padding(0, 1)
 )
 
-var colWidths = []int{20, 15, 30, 12, 12, 30}
+var colWidths = []int{20, 15, 30, 12, 12, 12, 30}
 
 func NewDownloadsTab() DownloadsTab {
 	return DownloadsTab{downloads: internal.DownloadsList, cursor: 0, pageStart: 0}
@@ -97,7 +97,7 @@ func getActions(status internal.Status) []string {
 	}
 }
 func (d DownloadsTab) RenderTable() string {
-	columns := []string{"Filename", "Queue", "Progress", "Time Left", "Status", "Action"}
+	columns := []string{"Filename", "Queue", "Progress", "Time Left", "Status", "Speed", "Action"}
 	var headerRow []string
 	for i, col := range columns {
 		headerRow = append(headerRow, lipgloss.NewStyle().Width(colWidths[i]).MaxWidth(colWidths[i]).Render(col))
@@ -134,6 +134,13 @@ func (d DownloadsTab) RenderTable() string {
 				actionStr = "[" + strings.Join(actions, "|") + "]"
 			}
 		}
+
+		// Speed display: show "N/A" if not in progress
+		speedStr := "N/A"
+		if entry.Status == internal.InProgress {
+			speedStr = formatSpeed(entry.Speed)
+		}
+
 		columns := []string{
 			lipgloss.NewStyle().
 				Width(colWidths[0]).
@@ -153,7 +160,10 @@ func (d DownloadsTab) RenderTable() string {
 				Render(string(entry.Status)),
 			lipgloss.NewStyle().
 				Width(colWidths[5]).
-				MaxWidth(colWidths[5]).
+				Render(speedStr),
+			lipgloss.NewStyle().
+				Width(colWidths[6]).
+				MaxWidth(colWidths[6]).
 				Render(actionStr),
 		}
 		rowContent := lipgloss.JoinHorizontal(
@@ -163,7 +173,8 @@ func (d DownloadsTab) RenderTable() string {
 			columns[2], " ",
 			columns[3], " ",
 			columns[4], " ",
-			columns[5],
+			columns[5], " ",
+			columns[6],
 		)
 		if i == d.cursor {
 			table += "  " + selectedRowStyle.Render(rowContent) + "\n"
@@ -328,4 +339,14 @@ func (d DownloadsTab) Init() tea.Cmd {
 
 func (d DownloadsTab) getFooter() string {
 	return "Use '↑/↓' to navigate rows, '→' to select actions, 'Enter' to execute"
+}
+
+func formatSpeed(speed float64) string {
+	if speed < 1024 {
+		return fmt.Sprintf("%.0f B/s", speed)
+	} else if speed < 1024*1024 {
+		return fmt.Sprintf("%.1f KB/s", speed/1024)
+	} else {
+		return fmt.Sprintf("%.1f MB/s", speed/(1024*1024))
+	}
 }

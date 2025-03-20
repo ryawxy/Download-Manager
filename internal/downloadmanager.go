@@ -105,6 +105,7 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 	defer wg.Done()
 
 	download.StartTime = time.Now()
+	download.LastUpdateTime = download.StartTime
 	req, err := http.NewRequestWithContext(download.Manager.Ctx, "GET", download.URL, nil)
 	if err != nil {
 		fmt.Println("Error creating request:", err)
@@ -140,14 +141,24 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 
 	buf := make([]byte, 1024)
 	totalBytesRead := int64(0)
+	lastBytes := int64(0) // Bytes at last speed update
 
 	for {
+		select {
+		case <-download.Manager.Ctx.Done():
+			file.Close()
+			fmt.Println("Download chunk canceled for:", partFileName)
+			return
+		default:
+		}
+
 		download.Manager.Mutex.Lock()
 		for download.Paused {
 			download.Manager.Mutex.Unlock()
 			select {
 			case <-download.Manager.Ctx.Done():
-				fmt.Println("Download cancelled")
+				file.Close()
+				fmt.Println("Download chunk canceled while paused for:", partFileName)
 				return
 			default:
 				time.Sleep(500 * time.Millisecond)
@@ -175,6 +186,18 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 
 			download.Manager.Mutex.Lock()
 			download.DownloadedBytes += int64(n)
+			totalBytesRead += int64(n)
+			now := time.Now()
+
+			// Update speed every 500ms
+			if now.Sub(download.LastUpdateTime) >= 500*time.Millisecond {
+				elapsed := now.Sub(download.LastUpdateTime).Seconds()
+				bytesSinceLast := download.DownloadedBytes - lastBytes
+				download.Speed = float64(bytesSinceLast) / elapsed // Bytes per second
+				download.LastUpdateTime = now
+				lastBytes = download.DownloadedBytes
+			}
+
 			percentage := float64(download.DownloadedBytes) / float64(download.FileSize) * 100
 			download.Progress = int64(percentage)
 			download.Manager.Mutex.Unlock()
@@ -188,7 +211,6 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 			download.changeDownloadStatus()
 			SaveQueuesToFile()
 
-			totalBytesRead += int64(n)
 			if totalBytesRead >= (end - start + 1) {
 				break
 			}
@@ -202,6 +224,17 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 			return
 		}
 	}
+
+	// Final speed update when chunk completes
+	download.Manager.Mutex.Lock()
+	now := time.Now()
+	elapsed := now.Sub(download.LastUpdateTime).Seconds()
+	if elapsed > 0 {
+		bytesSinceLast := download.DownloadedBytes - lastBytes
+		download.Speed = float64(bytesSinceLast) / elapsed
+		download.LastUpdateTime = now
+	}
+	download.Manager.Mutex.Unlock()
 }
 func (download *Download) StartDownload() error {
 
