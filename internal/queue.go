@@ -68,6 +68,8 @@ func NewQueue(id, directory string, retriesLimit int, bandwidthLimit int,
 		q.BandwidthSet = true
 		rate := time.Second / time.Duration(bandwidthLimit)
 		q.TokenBucket = NewTokenBucket(bandwidthLimit, rate)
+	} else {
+		q.TokenBucket = nil // ~= no limit
 	}
 	if maxConcurrent != 0 { // 0 means unset
 		q.MaxConcurrentDownloads = maxConcurrent
@@ -104,8 +106,12 @@ func (q *Queue) EditQueue(directory string, retriesLimit, maxConcurrent int, sta
 	q.EndTime = endTime
 	q.BandwidthLimit = bandwidthLimit
 
-	rate := time.Second / time.Duration(bandwidthLimit)
-	q.TokenBucket = NewTokenBucket(bandwidthLimit, rate)
+	if bandwidthLimit != 0 {
+		rate := time.Second / time.Duration(bandwidthLimit)
+		q.TokenBucket = NewTokenBucket(bandwidthLimit, rate)
+	} else {
+		q.TokenBucket = nil
+	}
 
 	_ = SaveQueuesToFile()
 	//fmt.Println("Queue", q.Id, "updated successfully.")

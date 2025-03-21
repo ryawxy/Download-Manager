@@ -33,7 +33,11 @@ func SaveQueuesToFile() error {
 func LoadQueuesFromFile() error {
 	q := &Queue{
 		Id:             "Default",
-		BandwidthLimit: 1000000,
+		BandwidthLimit: 1000000, // 1,000,000 bytes/s ~ 1,000 KB/s ~ 1 MB/s
+	}
+	if q.BandwidthLimit != 0 {
+		rate := time.Second / time.Duration(q.BandwidthLimit)
+		q.TokenBucket = NewTokenBucket(q.BandwidthLimit, rate)
 	}
 	QueuesList["Default"] = q
 
@@ -56,8 +60,12 @@ func LoadQueuesFromFile() error {
 	for _, q := range QueuesList {
 		q.StartTime = q.StartTime.UTC()
 		q.EndTime = q.EndTime.UTC()
-		rate := time.Second / time.Duration(q.BandwidthLimit)
-		q.TokenBucket = NewTokenBucket(q.BandwidthLimit, rate)
+		if q.BandwidthLimit != 0 {
+			rate := time.Second / time.Duration(q.BandwidthLimit)
+			q.TokenBucket = NewTokenBucket(q.BandwidthLimit, rate)
+		} else {
+			q.TokenBucket = nil
+		}
 
 		for _, d := range q.Downloads {
 			DownloadsList = append(DownloadsList, d)
@@ -73,6 +81,11 @@ func ResumeInProgressDownloads() {
 	for _, download := range DownloadsList {
 		if download.Status == InProgress {
 			fmt.Printf("Resuming in-progress download: %s\n", download.FileName)
+
+			queue := QueuesList[download.QueueName]
+			if queue == nil {
+				queue = QueuesList["Default"]
+			}
 
 			if download.Manager == nil {
 				download.NewDownloadManager(WORKERS, QueuesList[download.QueueName].TokenBucket)
@@ -138,7 +151,12 @@ func (q *Queue) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	q.EndTime = endTime
-	q.TokenBucket = NewTokenBucket(q.BandwidthLimit, time.Second/time.Duration(q.BandwidthLimit))
+
+	if q.BandwidthLimit != 0 {
+		q.TokenBucket = NewTokenBucket(q.BandwidthLimit, time.Second/time.Duration(q.BandwidthLimit))
+	} else {
+		q.TokenBucket = nil
+	}
 
 	return nil
 }
