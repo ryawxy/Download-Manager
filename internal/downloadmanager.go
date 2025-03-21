@@ -125,10 +125,10 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		if err == context.Canceled {
-			fmt.Println("Download cancelled before request started")
+			//		fmt.Println("Download cancelled before request started")
 			return
 		}
-		fmt.Println("Error during download:", err)
+		//	fmt.Println("Error during download:", err)
 		return
 	}
 	defer resp.Body.Close()
@@ -152,7 +152,7 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 			download.Manager.Mutex.Unlock()
 			select {
 			case <-download.Manager.Ctx.Done():
-				fmt.Println("Download cancelled while paused")
+				//		fmt.Println("Download cancelled while paused")
 				return
 			default:
 				time.Sleep(500 * time.Millisecond)
@@ -206,7 +206,7 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 			if err == io.EOF {
 				break
 			} else if err == context.Canceled {
-				fmt.Println("Download cancelled during read")
+				//		fmt.Println("Download cancelled during read")
 				return
 			}
 			fmt.Println("Error reading data:", err)
@@ -351,7 +351,7 @@ func (download *Download) CancelDownload() {
 	}
 
 	_ = SaveQueuesToFile()
-	fmt.Println("Download cancelled successfully.")
+	//	fmt.Println("Download cancelled successfully.")
 }
 
 func (download *Download) changeDownloadStatus() {
