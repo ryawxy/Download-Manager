@@ -103,27 +103,36 @@ func (q QueuesTab) updateCurrentQueue() QueuesTab {
 	q.queues[q.queueCursor].MaxConcurrentDownloads, _ = strconv.Atoi(q.inputs[3].Value())
 
 	now := time.Now()
-	startTime, err := time.Parse("15:04", q.inputs[4].Value())
-	if err == nil {
-		q.queues[q.queueCursor].StartTime = time.Date(
-			now.Year(), now.Month(), now.Day(),
-			startTime.Hour(), startTime.Minute(), 0, 0, now.Location(),
-		)
-	}
 
-	endTime, err := time.Parse("15:04", q.inputs[5].Value())
-	if err == nil {
-		q.queues[q.queueCursor].EndTime = time.Date(
-			now.Year(), now.Month(), now.Day(),
-			endTime.Hour(), endTime.Minute(), 0, 0, now.Location(),
-		)
-	}
-	if q.inputs[4].Value() == "" {
+	// Update StartTime and its flag based on whether the field is filled.
+	if q.inputs[4].Value() != "" {
+		startTime, err := time.Parse("15:04", q.inputs[4].Value())
+		if err == nil {
+			q.queues[q.queueCursor].StartTime = time.Date(
+				now.Year(), now.Month(), now.Day(),
+				startTime.Hour(), startTime.Minute(), 0, 0, now.Location(),
+			)
+			q.queues[q.queueCursor].StartTimeSet = true
+		}
+	} else {
 		q.queues[q.queueCursor].StartTimeSet = false
 	}
-	if q.inputs[5].Value() == "" {
+
+	// Update EndTime and its flag based on whether the field is filled.
+	if q.inputs[5].Value() != "" {
+		endTime, err := time.Parse("15:04", q.inputs[5].Value())
+		if err == nil {
+			q.queues[q.queueCursor].EndTime = time.Date(
+				now.Year(), now.Month(), now.Day(),
+				endTime.Hour(), endTime.Minute(), 0, 0, now.Location(),
+			)
+			q.queues[q.queueCursor].EndTimeSet = true
+		}
+	} else {
 		q.queues[q.queueCursor].EndTimeSet = false
 	}
+
+	// Pass the updated times (and booleans remain set in the queue) to EditQueue.
 	internalQueue := internal.QueuesList[q.queues[q.queueCursor].Id]
 	internalQueue.EditQueue(
 		q.queues[q.queueCursor].Directory,
@@ -292,16 +301,37 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				if q.buttonsCursor != -1 {
 					if q.buttonsCursor%2 == 0 {
+						// Create a new queue from the inputs.
 						id := q.inputs[0].Value()
 						directory := q.inputs[1].Value()
 						retries, _ := strconv.Atoi(q.inputs[2].Value())
 						bwLimit, _ := strconv.Atoi(q.inputs[3].Value())
 						maxconcurrent, _ := strconv.Atoi(q.inputs[4].Value())
-						startTime, _ := time.Parse("15:04", q.inputs[5].Value())
-						endTime, _ := time.Parse("15:04", q.inputs[6].Value())
-						now := time.Now()
-						startTime = time.Date(now.Year(), now.Month(), now.Day(), startTime.Hour(), startTime.Minute(), 0, 0, now.Location())
-						endTime = time.Date(now.Year(), now.Month(), now.Day(), endTime.Hour(), endTime.Minute(), 0, 0, now.Location())
+
+						var startTime time.Time
+						var endTime time.Time
+						startSet := false
+						endSet := false
+
+						// Only parse and set the start time if the field is not empty.
+						if q.inputs[5].Value() != "" {
+							st, err := time.Parse("15:04", q.inputs[5].Value())
+							if err == nil {
+								now := time.Now()
+								startTime = time.Date(now.Year(), now.Month(), now.Day(), st.Hour(), st.Minute(), 0, 0, now.Location())
+								startSet = true
+							}
+						}
+
+						// Only parse and set the end time if the field is not empty.
+						if q.inputs[6].Value() != "" {
+							et, err := time.Parse("15:04", q.inputs[6].Value())
+							if err == nil {
+								now := time.Now()
+								endTime = time.Date(now.Year(), now.Month(), now.Day(), et.Hour(), et.Minute(), 0, 0, now.Location())
+								endSet = true
+							}
+						}
 
 						newQueue := internal.NewQueue(
 							id,
@@ -312,11 +342,15 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							startTime,
 							endTime,
 						)
-						q.queues = append(q.queues, newQueue)
-						q.creatingNewQueue = false
-						q.controlContent = false
-						q.queueCursor = len(q.queues) - 1
-						q.setInputs()
+						if newQueue != nil {
+							newQueue.StartTimeSet = startSet
+							newQueue.EndTimeSet = endSet
+							q.queues = append(q.queues, newQueue)
+							q.creatingNewQueue = false
+							q.controlContent = false
+							q.queueCursor = len(q.queues) - 1
+							q.setInputs()
+						}
 					} else {
 						q.creatingNewQueue = false
 					}
@@ -324,6 +358,7 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				} else {
 					q.inputs[q.contentCursor], _ = q.inputs[q.contentCursor].Update(msg)
 				}
+
 			default:
 				if q.buttonsCursor == -1 && q.contentCursor < len(q.inputs) {
 					q.inputs[q.contentCursor], _ = q.inputs[q.contentCursor].Update(msg)
