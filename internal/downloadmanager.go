@@ -89,7 +89,10 @@ func (download *Download) GetFileSizeAndName() error {
 	if filename, ok := getFileNameFromHeader(headResp); ok {
 		download.FileName = filename
 	} else {
-		//	download.FileName = download.getFileNameFromURL()
+		download.FileName = download.getFileNameFromURL()
+	}
+	if download.SelectedName != "" {
+		download.FileName = download.SelectedName
 	}
 	SaveQueuesToFile()
 
@@ -103,7 +106,7 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 
 	file, err := os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
-		fmt.Println("Error creating part file:", err)
+		//	fmt.Println("Error creating part file:", err)
 		return
 	}
 	defer file.Close()
@@ -115,9 +118,12 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 		return
 	}
 
-	req, err := http.NewRequestWithContext(download.Manager.Ctx, "GET", download.URL, nil)
+	ctx, cancel := context.WithTimeout(download.Manager.Ctx, 120*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", download.URL, nil)
 	if err != nil {
-		fmt.Println("Error creating request:", err)
+		//		fmt.Println("Error creating request:", err)
 		return
 	}
 	req.Header.Set("Range", fmt.Sprintf("bytes=%d-%d", start, end))
@@ -128,13 +134,13 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 			//		fmt.Println("Download cancelled before request started")
 			return
 		}
-		//	fmt.Println("Error during download:", err)
+		//		fmt.Println("Error during download:", err)
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusPartialContent && start != 0 {
-		fmt.Println("Warning: Server does not support partial content properly.")
+		//	fmt.Println("Warning: Server does not support partial content properly.")
 		return
 	}
 
@@ -152,7 +158,7 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 			download.Manager.Mutex.Unlock()
 			select {
 			case <-download.Manager.Ctx.Done():
-				//		fmt.Println("Download cancelled while paused")
+				//				fmt.Println("Download cancelled while paused")
 				return
 			default:
 				time.Sleep(500 * time.Millisecond)
@@ -174,7 +180,7 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 
 			_, writeErr := file.Write(buf[:n])
 			if writeErr != nil {
-				fmt.Println("Error writing to part file:", writeErr)
+				//			fmt.Println("Error writing to part file:", writeErr)
 				return
 			}
 
@@ -191,11 +197,6 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 			SaveQueuesToFile()
 
 			totalBytesRead += int64(n)
-			// TODO for debugging retry -- SIMULATE failure after 50 KB process -- TODO for debugging retry
-			//if totalBytesRead > 50000 {
-			//	fmt.Println("Simulated network failure after 50KB")
-			//	return
-			//}
 
 			if totalBytesRead >= (end - start + 1) {
 				break
@@ -209,7 +210,7 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 				//		fmt.Println("Download cancelled during read")
 				return
 			}
-			fmt.Println("Error reading data:", err)
+			//		fmt.Println("Error reading data:", err)
 			return
 		}
 	}
@@ -272,14 +273,14 @@ func (download *Download) StartDownload() error {
 			err = mergeFiles(download)
 			if err != nil {
 				download.Status = Failed
-				fmt.Printf("Failed to merge files for %s: %v\n", download.FileName, err)
+				//		fmt.Printf("Failed to merge files for %s: %v\n", download.FileName, err)
 			} else {
 				download.Status = Completed
-				fmt.Printf("Download completed for %s\n", download.FileName)
+				//			fmt.Printf("Download completed for %s\n", download.FileName)
 			}
 		} else {
 			download.Status = Failed
-			fmt.Printf("Download failed for %s: incomplete download (downloaded %d of %d bytes)\n", download.FileName, download.DownloadedBytes, download.FileSize)
+			//		fmt.Printf("Download failed for %s: incomplete download (downloaded %d of %d bytes)\n", download.FileName, download.DownloadedBytes, download.FileSize)
 		}
 		SaveQueuesToFile()
 		return err
@@ -301,7 +302,7 @@ func mergeFiles(download *Download) error {
 		partPath := filepath.Join(download.Directory, fmt.Sprintf("%s.part%d", download.FileName, i))
 
 		if _, err := os.Stat(partPath); os.IsNotExist(err) {
-			fmt.Printf("Warning: Part %d is missing, skipping...\n", i)
+			//			fmt.Printf("Warning: Part %d is missing, skipping...\n", i)
 			continue
 		}
 
@@ -319,7 +320,7 @@ func mergeFiles(download *Download) error {
 		partFile.Close()
 
 		if err := os.Remove(partPath); err != nil {
-			fmt.Printf("Warning: failed to remove part %d: %v\n", i, err)
+			//		fmt.Printf("Warning: failed to remove part %d: %v\n", i, err)
 		}
 	}
 
@@ -398,7 +399,7 @@ func (download *Download) Retry() error {
 		return fmt.Errorf("retry limit (%d) exceeded for %s", queue.NumberOfTriesLimit, download.FileName)
 	}
 
-	fmt.Printf("retrying download: %s (Attempt %d/%d)\n", download.FileName, download.RetryCount+1, queue.NumberOfTriesLimit)
+	//fmt.Printf("retrying download: %s (Attempt %d/%d)\n", download.FileName, download.RetryCount+1, queue.NumberOfTriesLimit)
 
 	download.Status = InProgress
 	download.DownloadedBytes = 0
@@ -414,7 +415,7 @@ func (download *Download) Retry() error {
 	for i := 0; i < download.Manager.Workers; i++ {
 		partPath := filepath.Join(download.Directory, fmt.Sprintf("%s.part%d", download.FileName, i))
 		if err := os.Remove(partPath); err != nil && !os.IsNotExist(err) {
-			fmt.Printf("Warning: failed to remove %s: %v\n", partPath, err)
+			//		fmt.Printf("Warning: failed to remove %s: %v\n", partPath, err)
 		}
 	}
 
@@ -423,7 +424,7 @@ func (download *Download) Retry() error {
 	err := download.StartDownload()
 	if err != nil {
 		download.Status = Failed
-		fmt.Printf("retry failed for %s: %v\n", download.FileName, err)
+		//		fmt.Printf("retry failed for %s: %v\n", download.FileName, err)
 		return err
 	}
 	return nil
@@ -449,13 +450,13 @@ func (download *Download) ResumeDownload() {
 func (download *Download) CheckRangeSupport() bool {
 	req, err := http.NewRequest("HEAD", download.URL, nil)
 	if err != nil {
-		fmt.Println("Error creating HEAD request:", err)
+		//	fmt.Println("Error creating HEAD request:", err)
 		return false
 	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		fmt.Println("Error sending HEAD request:", err)
+		//	fmt.Println("Error sending HEAD request:", err)
 		return false
 	}
 	defer resp.Body.Close()

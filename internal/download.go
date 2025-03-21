@@ -1,6 +1,9 @@
 package internal
 
-import "time"
+import (
+	"sync"
+	"time"
+)
 
 type Status string
 
@@ -34,4 +37,7 @@ type Download struct {
 	lastSpeedCalcBytes int64
 	RetryCount         int    `json:"retry_count"`
 	SelectedName       string `json:"selected_name"`
+	NetworkFailed      bool
+	UserCancelled      bool
+	Mutex              sync.Mutex
 }
