@@ -20,6 +20,7 @@ type DownloadsTab struct {
 	pageStart     int
 	showOptions   bool
 	optionsCursor int
+	message       string
 }
 
 var (
@@ -240,7 +241,24 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					case "Cancel":
 						go d.downloads[d.cursor].CancelDownload()
 					case "Retry":
-						//go d.downloads[d.cursor].Retry()
+						go func() {
+							err := d.downloads[d.cursor].Retry()
+							if err != nil {
+								// Customize the message based on the error
+								if strings.Contains(err.Error(), "retry limit") {
+									queue := internal.QueuesList[d.downloads[d.cursor].QueueName]
+									limit := queue.NumberOfTriesLimit
+									fileName := d.downloads[d.cursor].FileName
+									d.message = fmt.Sprintf("Retry limit (%d) reached for %s", limit, fileName)
+								} else {
+									d.message = fmt.Sprintf("Retry failed for %s: %v", d.downloads[d.cursor].FileName, err)
+								}
+								internal.SaveQueuesToFile()
+								tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+									return clearMessageMsg{}
+								})
+							}
+						}()
 					case "Delete":
 						selectedDL := d.downloads[d.cursor]
 						if queue, exists := internal.QueuesList[selectedDL.QueueName]; exists {
@@ -284,6 +302,8 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						d.downloads[i].Progress = qDL.Progress
 						d.downloads[i].Status = qDL.Status
 						d.downloads[i].FileSize = qDL.FileSize
+						d.downloads[i].Speed = qDL.Speed
+						d.downloads[i].RetryCount = qDL.RetryCount
 						break
 					}
 				}
@@ -297,12 +317,21 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return d, tea.Tick(200*time.Millisecond, func(t time.Time) tea.Msg {
 			return tickMsg(t)
 		})
+	case clearMessageMsg:
+		d.message = ""
+		return d, nil
 	}
 	return d, nil
 }
 
 func (d DownloadsTab) View() string {
-	return d.RenderTable()
+	//return d.RenderTable()
+	table := d.RenderTable()
+	if d.message != "" {
+		messageStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000")).Render(d.message)
+		return lipgloss.JoinVertical(lipgloss.Top, table, messageStyled)
+	}
+	return table
 }
 
 func (d DownloadsTab) setActive(b bool) Tab {

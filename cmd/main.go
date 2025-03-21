@@ -149,7 +149,7 @@ func cliMain() {
 					filename := parts[2]
 					for _, d := range q.Downloads {
 						if d.FileName == filename {
-							if err := d.Retry(q); err != nil {
+							if err := d.Retry(); err != nil {
 								fmt.Println("Retry error:", err)
 							}
 							break

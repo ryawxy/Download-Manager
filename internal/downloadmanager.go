@@ -195,6 +195,12 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 			SaveQueuesToFile()
 
 			totalBytesRead += int64(n)
+			// TODO for debugging retry -- SIMULATE failure after 50 KB process -- TODO for debugging retry
+			//if totalBytesRead > 50000 {
+			//	fmt.Println("Simulated network failure after 50KB")
+			//	return // Exit the function, simulating a failure
+			//}
+
 			if totalBytesRead >= (end - start + 1) {
 				break
 			}
@@ -216,7 +222,6 @@ func (download *Download) StartDownload() error {
 	download.StartTime = time.Now()
 	download.LastUpdateTime = download.StartTime
 	download.LastBytes = 0
-	// Initialize speed calculation fields
 	download.lastSpeedCalcTime = download.StartTime
 	download.lastSpeedCalcBytes = 0
 	download.Speed = 0.0
@@ -255,15 +260,30 @@ func (download *Download) StartDownload() error {
 
 	wg.Wait()
 
+	download.Manager.Mutex.Lock()
+	defer download.Manager.Mutex.Unlock()
+
 	select {
 	case <-download.Manager.Ctx.Done():
 		download.Status = Cancelled
+		SaveQueuesToFile()
 		return nil
 	default:
-		if download.Status == InProgress && download.DownloadedBytes >= download.FileSize {
-			download.Status = Completed
+		if download.DownloadedBytes >= download.FileSize {
+			err = mergeFiles(download)
+			if err != nil {
+				download.Status = Failed
+				fmt.Printf("Failed to merge files for %s: %v\n", download.FileName, err)
+			} else {
+				download.Status = Completed
+				fmt.Printf("Download completed for %s\n", download.FileName)
+			}
+		} else {
+			download.Status = Failed
+			fmt.Printf("Download failed for %s: incomplete download (downloaded %d of %d bytes)\n", download.FileName, download.DownloadedBytes, download.FileSize)
 		}
-		return mergeFiles(download)
+		SaveQueuesToFile()
+		return err
 	}
 }
 
@@ -277,6 +297,7 @@ func mergeFiles(download *Download) error {
 
 	//fmt.Println("merging downloaded parts...")
 
+	var totalMergedBytes int64
 	for i := 0; i < download.Manager.Workers; i++ {
 		partPath := filepath.Join(download.Directory, fmt.Sprintf("%s.part%d", download.FileName, i))
 
@@ -290,12 +311,12 @@ func mergeFiles(download *Download) error {
 			return fmt.Errorf("Error opening part %d: %v\n", i, err)
 		}
 
-		_, err = io.Copy(outputFile, partFile)
+		bytesWritten, err := io.Copy(outputFile, partFile)
 		if err != nil {
 			partFile.Close()
-			fmt.Printf("Error copying part %d: %v\n", i, err)
-			return err
+			return fmt.Errorf("Error copying part %d: %v\n", i, err)
 		}
+		totalMergedBytes += bytesWritten
 		partFile.Close()
 
 		if err := os.Remove(partPath); err != nil {
@@ -303,7 +324,11 @@ func mergeFiles(download *Download) error {
 		}
 	}
 
-	//fmt.Println("Download complete.")
+	if totalMergedBytes != download.FileSize {
+		return fmt.Errorf("merged file size (%d) does not match expected size (%d)", totalMergedBytes, download.FileSize)
+	}
+
+	// fmt.Println("Download merged successfully:", download.FileName)
 	return nil
 }
 func (download *Download) CancelDownload() {
@@ -355,33 +380,50 @@ func (download *Download) changeDownloadStatus() {
 	//	fmt.Printf("Download status updated: %s -> %s\n", download.FileName, download.Status)
 }
 
-func (download *Download) Retry(queue *Queue) error {
+func (download *Download) Retry() error {
+	queue, exists := QueuesList[download.QueueName]
+	if !exists {
+		return fmt.Errorf("queue %s not found for download %s", download.QueueName, download.FileName)
+	}
+
+	download.Manager.Mutex.Lock()
+	defer download.Manager.Mutex.Unlock()
+
 	if download.Status != Failed {
 		return fmt.Errorf("retry not allowed, download status is: %s\n", download.Status)
 	}
 
-	download.Manager.Mutex.Lock()
-	attempts := 0
-	for _, d := range queue.Downloads {
-		if d.FileName == download.FileName {
-			attempts++
-		}
+	if !queue.RetriesSet || queue.NumberOfTriesLimit <= 0 {
+		return fmt.Errorf("retry limit not set for queue %s", queue.Id)
 	}
-	if attempts >= queue.NumberOfTriesLimit {
-		download.Manager.Mutex.Unlock()
-		return fmt.Errorf("retry limit (%d) exceeded for %s\n", queue.NumberOfTriesLimit, download.FileName)
-	}
-	download.Manager.Mutex.Unlock()
 
-	fmt.Printf("retrying download: %s (Attempt %d/%d) \n", download.FileName, attempts+1, queue.NumberOfTriesLimit)
+	if download.RetryCount >= queue.NumberOfTriesLimit {
+		return fmt.Errorf("retry limit (%d) exceeded for %s", queue.NumberOfTriesLimit, download.FileName)
+	}
+
+	fmt.Printf("retrying download: %s (Attempt %d/%d)\n", download.FileName, download.RetryCount+1, queue.NumberOfTriesLimit)
+
+	// Reset download state
 	download.Status = InProgress
 	download.DownloadedBytes = 0
 	download.Progress = 0
+	download.RetryCount++
+	download.StartTime = time.Now() // Reset start time for accurate speed calculation
+	download.LastUpdateTime = download.StartTime
+	download.LastBytes = 0
+	download.Speed = 0
+	download.lastSpeedCalcTime = download.StartTime
+	download.lastSpeedCalcBytes = 0
 
+	// Cleaning old part files
 	for i := 0; i < download.Manager.Workers; i++ {
 		partPath := filepath.Join(download.Directory, fmt.Sprintf("%s.part%d", download.FileName, i))
-		os.Remove(partPath)
+		if err := os.Remove(partPath); err != nil && !os.IsNotExist(err) {
+			fmt.Printf("Warning: failed to remove %s: %v\n", partPath, err)
+		}
 	}
+
+	download.NewDownloadManager(download.Manager.Workers, queue.TokenBucket)
 
 	err := download.StartDownload()
 	if err != nil {
@@ -390,8 +432,8 @@ func (download *Download) Retry(queue *Queue) error {
 		return err
 	}
 
-	download.Status = Completed
-	fmt.Printf("Retry successful for: %s\n", download.FileName)
+	//download.Status = Completed
+	//fmt.Printf("Retry successful for: %s\n", download.FileName)
 	return nil
 }
 
