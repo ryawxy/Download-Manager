@@ -89,7 +89,7 @@ func (download *Download) GetFileSizeAndName() error {
 	if filename, ok := getFileNameFromHeader(headResp); ok {
 		download.FileName = filename
 	} else {
-		download.FileName = download.getFileNameFromURL()
+		//	download.FileName = download.getFileNameFromURL()
 	}
 	SaveQueuesToFile()
 
@@ -237,6 +237,9 @@ func (download *Download) StartDownload() error {
 	err := download.GetFileSizeAndName()
 	if err != nil {
 		return err
+	}
+	if download.SelectedName != "" {
+		download.FileName = download.SelectedName
 	}
 
 	chunkSize := download.FileSize / int64(download.Manager.Workers)

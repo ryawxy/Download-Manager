@@ -205,6 +205,9 @@ func StartQueueDownloads(q *Queue) {
 				fmt.Printf("Error getting file info for %s: %v\n", d.URL, err)
 				return
 			}
+			if d.SelectedName != "" {
+				d.FileName = d.SelectedName
+			}
 
 			fmt.Printf("Downloading file: %s\n", d.FileName)
 			if err := d.StartDownload(); err != nil {

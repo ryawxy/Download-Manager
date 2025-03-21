@@ -32,5 +32,6 @@ type Download struct {
 	Speed              float64
 	lastSpeedCalcTime  time.Time
 	lastSpeedCalcBytes int64
-	RetryCount         int `json:"retry_count"`
+	RetryCount         int    `json:"retry_count"`
+	SelectedName       string `json:"selected_name"`
 }

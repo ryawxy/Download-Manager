@@ -136,6 +136,7 @@ func (n *NewDownloadTab) newDownload() tea.Cmd {
 	newDownload.NewDownloadManager(internal.WORKERS, selectedQueue.TokenBucket)
 
 	err := newDownload.GetFileSizeAndName()
+	newDownload.SelectedName = name
 	if err != nil {
 		n.errorMsg = "Invalid URL or unreachable resource"
 		return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
