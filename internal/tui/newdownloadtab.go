@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"strings"
+	"time"
 )
 
 var (
@@ -93,7 +94,7 @@ func (n NewDownloadTab) Init() tea.Cmd {
 	return nil
 }
 
-func (n *NewDownloadTab) newDownload() {
+func (n *NewDownloadTab) newDownload() tea.Cmd {
 	url := strings.TrimSpace(n.url.Value())
 	queueName := strings.TrimSpace(n.queue.Value())
 	saveAs := strings.TrimSpace(n.saveAs.Value())
@@ -102,7 +103,9 @@ func (n *NewDownloadTab) newDownload() {
 	if url == "" || queueName == "" {
 		n.errorMsg = "All fields must be filled!"
 		n.successMsg = ""
-		return
+		return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+			return clearMessageMsg{}
+		})
 	}
 
 	var selectedQueue *internal.Queue
@@ -116,7 +119,9 @@ func (n *NewDownloadTab) newDownload() {
 	if selectedQueue == nil {
 		n.errorMsg = fmt.Sprintf("Queue '%s' not found!", queueName)
 		n.successMsg = ""
-		return
+		return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+			return clearMessageMsg{}
+		})
 	}
 	if saveAs == "" {
 		saveAs = selectedQueue.Directory
@@ -133,7 +138,9 @@ func (n *NewDownloadTab) newDownload() {
 	err := newDownload.GetFileSizeAndName()
 	if err != nil {
 		n.errorMsg = "Invalid URL or unreachable resource"
-		return
+		return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+			return clearMessageMsg{}
+		})
 	}
 	if name != "" {
 		newDownload.FileName = name
@@ -142,14 +149,18 @@ func (n *NewDownloadTab) newDownload() {
 	err = selectedQueue.AddDownload(&newDownload)
 	if err != nil {
 		n.errorMsg = "Failed to add to queue"
-		return
+		return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+			return clearMessageMsg{}
+		})
 	}
 	internal.DownloadsList = append(internal.DownloadsList, &newDownload)
-
 	fmt.Println(len(selectedQueue.Downloads))
 
 	n.successMsg = fmt.Sprintf("Added '%s' to queue '%s'", newDownload.FileName, queueName)
 	n.errorMsg = ""
+	return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+		return clearMessageMsg{}
+	})
 }
 
 func (n NewDownloadTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -171,13 +182,17 @@ func (n NewDownloadTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				n.cursor = 3
 			case "enter":
 				if n.buttonIndex == 0 {
-					n.newDownload()
-					n.url.SetValue("")
-					n.queue.SetValue("")
-					n.saveAs.SetValue("")
-					n.name.SetValue("")
-					n.errorMsg = ""
-					n.successMsg = ""
+					cmd := n.newDownload()
+					if n.errorMsg == "" {
+						n.url.SetValue("")
+						n.queue.SetValue("")
+						n.saveAs.SetValue("")
+						n.name.SetValue("")
+					}
+					n.buttonMode = false
+					n.buttonIndex = 0
+					n.cursor = 0
+					return n, cmd
 				} else {
 					n.url.SetValue("")
 					n.queue.SetValue("")
@@ -185,10 +200,10 @@ func (n NewDownloadTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					n.name.SetValue("")
 					n.errorMsg = ""
 					n.successMsg = ""
+					n.buttonMode = false
+					n.buttonIndex = 0
+					n.cursor = 0
 				}
-				n.buttonMode = false
-				n.buttonIndex = 0
-				n.cursor = 0
 			}
 			return n, nil
 		}
@@ -210,7 +225,10 @@ func (n NewDownloadTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			n.isActive = false
 			n.cursor = -1
 		case "enter":
-			n.newDownload()
+			if !n.buttonMode {
+				cmd := n.newDownload()
+				return n, cmd
+			}
 		default:
 			switch n.cursor {
 			case 0:
@@ -227,6 +245,9 @@ func (n NewDownloadTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				n.name.Focus()
 			}
 		}
+	case clearMessageMsg:
+		n.errorMsg = ""
+		return n, nil
 	}
 	return n, nil
 }
@@ -280,6 +301,7 @@ func (n NewDownloadTab) View() string {
 		buttons := lipgloss.JoinHorizontal(lipgloss.Center, createButton, "   ", cancelButton)
 		layout = lipgloss.JoinVertical(lipgloss.Top, fields, buttons, errMsg, successMsg)
 	}
+
 	return layout
 }
 

@@ -127,8 +127,6 @@ func (d DownloadsTab) RenderTable() string {
 				actionStr = "[" + strings.Join(actions, "|") + "]"
 			}
 		}
-
-		// Speed display: show "N/A" if not in progress
 		speedStr := "N/A"
 		if entry.Status == internal.InProgress {
 			speedStr = formatSpeed(entry.Speed)
@@ -325,7 +323,6 @@ func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (d DownloadsTab) View() string {
-	//return d.RenderTable()
 	table := d.RenderTable()
 	if d.message != "" {
 		messageStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000")).Render(d.message)

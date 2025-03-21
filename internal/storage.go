@@ -33,7 +33,7 @@ func SaveQueuesToFile() error {
 func LoadQueuesFromFile() error {
 	q := &Queue{
 		Id:             "Default",
-		BandwidthLimit: 1000000, // 1,000,000 bytes/s ~ 1,000 KB/s ~ 1 MB/s
+		BandwidthLimit: 1000000,
 	}
 	if q.BandwidthLimit != 0 {
 		rate := time.Second / time.Duration(q.BandwidthLimit)
@@ -90,12 +90,6 @@ func ResumeInProgressDownloads() {
 			if download.Manager == nil {
 				download.NewDownloadManager(WORKERS, QueuesList[download.QueueName].TokenBucket)
 			}
-
-			// reset progress if restart from scratch
-			// download.DownloadedBytes = 0
-			// download.Progress = 0
-
-			// clean up partial files from previous run
 			for i := 0; i < download.Manager.Workers; i++ {
 				partPath := filepath.Join(download.Directory, fmt.Sprintf("%s.part%d", download.FileName, i))
 				os.Remove(partPath)
@@ -109,6 +103,20 @@ func ResumeInProgressDownloads() {
 				}
 				SaveQueuesToFile()
 			}(download)
+		}
+		if download.Status == Failed {
+			queue := QueuesList[download.QueueName]
+			if queue == nil {
+				queue = QueuesList["Default"]
+			}
+
+			if download.Manager == nil {
+				download.NewDownloadManager(WORKERS, QueuesList[download.QueueName].TokenBucket)
+			}
+			for i := 0; i < download.Manager.Workers; i++ {
+				partPath := filepath.Join(download.Directory, fmt.Sprintf("%s.part%d", download.FileName, i))
+				os.Remove(partPath)
+			}
 		}
 	}
 }

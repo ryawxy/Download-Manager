@@ -250,7 +250,6 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				q.buttonsCursor = -1
 			case "enter":
 				if q.buttonsCursor != -1 {
-					// Button mode: 0 = state control; 1 = delete.
 					if q.buttonsCursor == 0 {
 						currentQueue := q.queues[q.queueCursor]
 						if !currentQueue.HasStarted {

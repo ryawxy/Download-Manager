@@ -52,25 +52,23 @@ func NewQueue(id, directory string, retriesLimit int, bandwidthLimit int,
 		//EndTime:                endTime,
 		//TokenBucket:            NewTokenBucket(bandwidthLimit, rate),
 	}
-
-	// Set fields only if provided
 	if directory != "" {
 		q.Directory = directory
 		q.DirectorySet = true
 	}
-	if retriesLimit != 0 { // 0 means unset
+	if retriesLimit != 0 {
 		q.NumberOfTriesLimit = retriesLimit
 		q.RetriesSet = true
 	}
-	if bandwidthLimit != 0 { // 0 means unset, no TokenBucket
+	if bandwidthLimit != 0 {
 		q.BandwidthLimit = bandwidthLimit
 		q.BandwidthSet = true
 		rate := time.Second / time.Duration(bandwidthLimit)
 		q.TokenBucket = NewTokenBucket(bandwidthLimit, rate)
 	} else {
-		q.TokenBucket = nil // ~= no limit
+		q.TokenBucket = nil
 	}
-	if maxConcurrent != 0 { // 0 means unset
+	if maxConcurrent != 0 {
 		q.MaxConcurrentDownloads = maxConcurrent
 		q.MaxConcurrentSet = true
 	}

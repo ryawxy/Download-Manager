@@ -50,9 +50,6 @@ func getFileNameFromHeader(resp *http.Response) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-
-	//fmt.Println("DEBUGGING PRINT !!! MediaType is: ", mediaType)
-
 	filename, ok := params["filename"]
 	return filename, ok
 }
@@ -187,7 +184,6 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 			download.Progress = int64(percentage)
 			download.Manager.Mutex.Unlock()
 
-			// Calculate speed after updating DownloadedBytes
 			download.calculateSpeed()
 
 			download.ShowProgress()
@@ -198,7 +194,7 @@ func (download *Download) downloadChunk(start int64, end int64, partNum int, wg 
 			// TODO for debugging retry -- SIMULATE failure after 50 KB process -- TODO for debugging retry
 			//if totalBytesRead > 50000 {
 			//	fmt.Println("Simulated network failure after 50KB")
-			//	return // Exit the function, simulating a failure
+			//	return
 			//}
 
 			if totalBytesRead >= (end - start + 1) {
@@ -340,7 +336,6 @@ func (download *Download) CancelDownload() {
 	download.Paused = false
 	//fmt.Println("Download cancelled for:", download.FileName)
 
-	// for debugging
 	time.Sleep(500 * time.Millisecond)
 
 	for i := 0; i < download.Manager.Workers; i++ {
@@ -377,7 +372,6 @@ func (download *Download) changeDownloadStatus() {
 		download.Status = Failed
 	}
 
-	//	fmt.Printf("Download status updated: %s -> %s\n", download.FileName, download.Status)
 }
 
 func (download *Download) Retry() error {
@@ -403,19 +397,17 @@ func (download *Download) Retry() error {
 
 	fmt.Printf("retrying download: %s (Attempt %d/%d)\n", download.FileName, download.RetryCount+1, queue.NumberOfTriesLimit)
 
-	// Reset download state
 	download.Status = InProgress
 	download.DownloadedBytes = 0
 	download.Progress = 0
 	download.RetryCount++
-	download.StartTime = time.Now() // Reset start time for accurate speed calculation
+	download.StartTime = time.Now()
 	download.LastUpdateTime = download.StartTime
 	download.LastBytes = 0
 	download.Speed = 0
 	download.lastSpeedCalcTime = download.StartTime
 	download.lastSpeedCalcBytes = 0
 
-	// Cleaning old part files
 	for i := 0; i < download.Manager.Workers; i++ {
 		partPath := filepath.Join(download.Directory, fmt.Sprintf("%s.part%d", download.FileName, i))
 		if err := os.Remove(partPath); err != nil && !os.IsNotExist(err) {
@@ -431,9 +423,6 @@ func (download *Download) Retry() error {
 		fmt.Printf("retry failed for %s: %v\n", download.FileName, err)
 		return err
 	}
-
-	//download.Status = Completed
-	//fmt.Printf("Retry successful for: %s\n", download.FileName)
 	return nil
 }
 
@@ -452,7 +441,6 @@ func (download *Download) ResumeDownload() {
 	defer download.Manager.Mutex.Unlock()
 	download.Paused = false
 	download.Status = InProgress
-	// Removed: go download.StartDownload()
 }
 
 func (download *Download) CheckRangeSupport() bool {
@@ -477,8 +465,6 @@ func (download *Download) ShowProgress() {
 
 	percentage := float64(download.DownloadedBytes) / float64(download.FileSize) * 100
 	download.Progress = int64(percentage)
-	//speedKBps := download.Speed / 1024
-	//	fmt.Printf("\rProgress: %.2f%% | Speed: %.2f KB/s", percentage, speedKBps)
 }
 func (download *Download) calculateSpeed() {
 	download.Manager.Mutex.Lock()
