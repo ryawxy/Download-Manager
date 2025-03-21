@@ -156,11 +156,7 @@ func (d DownloadsTab) RenderTable() string {
 func (d DownloadsTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if len(d.downloads) == 0 {
-			return d, nil
-		}
 		switch msg.String() {
-
 		case "up":
 			if d.cursor > 0 {
 				d.cursor--
