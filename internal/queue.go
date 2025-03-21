@@ -36,7 +36,6 @@ var QueuesList = make(map[string]*Queue)
 func NewQueue(id, directory string, retriesLimit int, bandwidthLimit int,
 	maxConcurrent int, startTime, endTime time.Time) *Queue {
 
-	// invalid or duplicate name - only field which required here
 	if id == "" || QueuesList[id] != nil {
 		return nil
 	}
@@ -75,14 +74,18 @@ func NewQueue(id, directory string, retriesLimit int, bandwidthLimit int,
 		q.MaxConcurrentDownloads = maxConcurrent
 		q.MaxConcurrentSet = true
 	}
-	if !startTime.IsZero() {
-		q.StartTime = startTime
-		q.StartTimeSet = true
-	}
-	if !endTime.IsZero() {
-		q.EndTime = endTime
-		q.EndTimeSet = true
-	}
+	//if !startTime.IsZero() {
+	//	q.StartTime = startTime
+	//	q.StartTimeSet = true
+	//} else {
+	//	q.StartTimeSet = false
+	//}
+	//if !endTime.IsZero() {
+	//	q.EndTime = endTime
+	//	q.EndTimeSet = true
+	//} else {
+	//	q.EndTimeSet = false
+	//}
 
 	QueuesList[id] = q
 	_ = SaveQueuesToFile()
@@ -165,7 +168,7 @@ func StartQueueDownloads(q *Queue) {
 	if q.Paused {
 		fmt.Printf("Queue %s is paused. Downloads will wait until resumed.\n", q.Id)
 		q.mutex.Unlock()
-		return // Let ResumeQueue handle continuation
+		return
 	}
 	q.mutex.Unlock()
 
@@ -175,11 +178,14 @@ func StartQueueDownloads(q *Queue) {
 	ctx, cancel := context.WithCancel(context.Background())
 	q.CancelFunc = cancel
 
-	time.AfterFunc(time.Until(q.EndTime), func() {
-		q.StopDownloads()
-	})
+	if q.EndTimeSet {
+		time.AfterFunc(time.Until(q.EndTime), func() {
+			q.StopDownloads()
+		})
+	}
 
 	for _, d := range q.Downloads {
+
 		wg.Add(1)
 		sem <- struct{}{}
 
@@ -207,6 +213,7 @@ func StartQueueDownloads(q *Queue) {
 				fmt.Println("Error:", err)
 			}
 		}(d, q.Directory, q.TokenBucket)
+
 	}
 
 	wg.Wait()
@@ -296,4 +303,12 @@ func DeleteQueue(queueName string) []*Queue {
 		updatedQueues = append(updatedQueues, q)
 	}
 	return updatedQueues
+}
+func (q *Queue) CompleteQueueDownloads() bool {
+	for _, dl := range q.Downloads {
+		if dl.Status != Completed {
+			return false
+		}
+	}
+	return true
 }

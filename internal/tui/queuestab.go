@@ -44,13 +44,14 @@ func temporaryRandomQueues() []*internal.Queue {
 func scheduleQueueCmd(queue *internal.Queue) tea.Cmd {
 	return func() tea.Msg {
 		now := time.Now()
-		if now.After(queue.EndTime) {
+
+		if queue.EndTimeSet && now.After(queue.EndTime) {
 			return QueueActionMsg{
 				QueueID: queue.Id,
 				Action:  "cannot_start",
 				Message: fmt.Sprintf("Cannot start queue %s: current time is past the end time", queue.Id),
 			}
-		} else if now.Before(queue.StartTime) {
+		} else if queue.StartTimeSet && now.Before(queue.StartTime) {
 			delay := queue.StartTime.Sub(now)
 			time.AfterFunc(delay, func() {
 				if time.Now().Before(queue.EndTime) {
@@ -117,7 +118,12 @@ func (q QueuesTab) updateCurrentQueue() QueuesTab {
 			endTime.Hour(), endTime.Minute(), 0, 0, now.Location(),
 		)
 	}
-
+	if q.inputs[4].Value() == "" {
+		q.queues[q.queueCursor].StartTimeSet = false
+	}
+	if q.inputs[5].Value() == "" {
+		q.queues[q.queueCursor].EndTimeSet = false
+	}
 	internalQueue := internal.QueuesList[q.queues[q.queueCursor].Id]
 	internalQueue.EditQueue(
 		q.queues[q.queueCursor].Directory,
@@ -334,7 +340,6 @@ func (q *QueuesTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return sortedQueues[i].Id < sortedQueues[j].Id
 		})
 		q.queues = sortedQueues
-		// Only update inputs if not currently editing.
 		if !q.creatingNewQueue && !q.controlContent && len(q.queues) > 0 {
 			if q.queueCursor >= len(q.queues) {
 				q.queueCursor = 0
