@@ -1,7 +1,5 @@
 package tui
 
-//todo update README.md
-
 import (
 	"IDM/internal"
 	"fmt"
@@ -25,14 +23,10 @@ type MainStage struct {
 	height, width int
 }
 
-const newDownloadTabId = 0
-const queuesTabId = 2
-const downloadsTabId = 1
-
 func NewMainStage() MainStage {
 	return MainStage{
 		height:     20,
-		width:      100,
+		width:      200,
 		currentTab: 0,
 		tabs:       append([]Tab{}, NewNewDownloadTab(), NewDownloadsTab(), NewQueuesTab()),
 	}
@@ -69,9 +63,21 @@ func (m MainStage) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			internal.GracefulShutdown()
 			return m, tea.Quit
 		}
-	case tea.WindowSizeMsg: // Handles terminal resizing
-		m.height = msg.Height // Update stored height dynamically
-		m.width = msg.Width   // Update stored width dynamically
+	case exitQueuesMsg:
+		m.tabs[m.currentTab] = m.tabs[m.currentTab].setActive(false)
+		return m, nil
+	case exitDownloadsMsg:
+		m.tabs[m.currentTab] = m.tabs[m.currentTab].setActive(false)
+		return m, nil
+
+	case internal.ProgressMsg:
+		return m, tea.Tick(time.Millisecond*500, func(t time.Time) tea.Msg {
+			return tickMsg(t)
+		})
+
+	case tea.WindowSizeMsg:
+		m.height = msg.Height
+		m.width = msg.Width
 	}
 	for _, tab := range m.tabs {
 		if tab.isActivated() {
@@ -99,13 +105,12 @@ var (
 	selectedTabStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("48")).Background(lipgloss.Color("")).Bold(true)
 	unselectedTabStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Background(lipgloss.Color(""))
 	footerStyle        = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("240")). // Dark gray color
-				Background(lipgloss.Color("")).    // Black background
+				Foreground(lipgloss.Color("240")).
+				Background(lipgloss.Color("")).
 				Padding(0, 1)
 )
 
 func (m MainStage) View() string {
-	// Generate tab labels
 	var renderedTabs []string
 	for i, tab := range m.tabs {
 		if i == m.currentTab {
@@ -115,26 +120,19 @@ func (m MainStage) View() string {
 		}
 	}
 
-	// Tab navigation bar
 	tabs := lipgloss.JoinVertical(lipgloss.Top, renderedTabs...)
 	content := m.tabs[m.currentTab].View()
 
-	// Footer text
 	footerText := fmt.Sprintf(" Active Tab: %s %s", m.tabs[m.currentTab].toString(), m.tabs[m.currentTab].getFooter())
 	footer := footerStyle.Render(footerText)
 
-	// Properly position footer at the **BOTTOM** of the terminal
-	body := lipgloss.JoinHorizontal(lipgloss.Left, tabs, "     ", content)
+	body := lipgloss.JoinHorizontal(lipgloss.Left, tabs, "  ", content)
 
-	// Calculate available space for content
 	contentHeight := lipgloss.Height(body)
-	remainingSpace := m.height - contentHeight - 2 // Adjusted spacing
-
-	// Ensure at least some space before footer
+	remainingSpace := m.height - contentHeight - 2
 	if remainingSpace < 0 {
 		remainingSpace = 0
 	}
 
-	// Use `lipgloss.Place` to enforce bottom positioning
 	return body + lipgloss.Place(m.width, max(m.height-lipgloss.Height(body), 0), lipgloss.Left, lipgloss.Bottom, footer)
 }
